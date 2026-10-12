@@ -1,19 +1,20 @@
 using System;
 using System.IO;
 
-namespace ClaudeVpnGuard
+namespace AgentVpnGuard
 {
     internal static class AppIdentity
     {
-        public const string Name = "ClaudeVpnGuard";
-        public const string Version = "2.2";
-        public const string ExecutableName = "ClaudeVpnGuard.exe";
-        public const string ProcessName = "ClaudeVpnGuard";
+        public const string Name = "AgentVpnGuard";
+        public const string LegacyName = "ClaudeVpnGuard";
+        public const string Version = "3.0";
+        public const string ExecutableName = "AgentVpnGuard.exe";
+        public const string ProcessName = "AgentVpnGuard";
         public const string UninstallerName = "Uninstall.exe";
-        public const string FirewallGroup = "ClaudeVpnGuard";
-        public const string SingleInstanceMutex = @"Global\ClaudeVpnGuard.SingleInstance";
-        public const string GitHubUrl = "https://github.com/aokazantsev/ClaudeVpnGuard";
-        public const string SiteUrl = "https://aokazantsev.ru/pets/claudevpnguard/";
+        public const string FirewallGroup = "AgentVpnGuard";
+        public const string SingleInstanceMutex = @"Global\AgentVpnGuard.SingleInstance";
+        public const string GitHubUrl = "https://github.com/aokazantsev/AgentVpnGuard";
+        public const string SiteUrl = "https://aokazantsev.ru/pets/agentvpnguard/";
         public const string AutostartDelay = "PT0S";
 
         public static string DataDirectory

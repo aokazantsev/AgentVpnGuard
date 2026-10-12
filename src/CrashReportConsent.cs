@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 
-namespace ClaudeVpnGuard
+namespace AgentVpnGuard
 {
     internal static class CrashReportConsent
     {

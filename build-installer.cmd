@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-set APP=ClaudeVpnGuard
+set APP=AgentVpnGuard
 set CSC="%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 set REFS=/r:System.Windows.Forms.dll /r:System.Drawing.dll /r:Microsoft.CSharp.dll /r:System.Core.dll /r:System.ServiceProcess.dll
 set SHARED=src\AppIdentity.cs src\Autostart.cs

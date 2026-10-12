@@ -2,7 +2,7 @@ using System;
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace ClaudeVpnGuard
+namespace AgentVpnGuard
 {
     internal static class TrayMenu
     {

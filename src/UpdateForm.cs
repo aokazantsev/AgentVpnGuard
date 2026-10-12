@@ -4,7 +4,7 @@ using System.Drawing;
 using System.Threading;
 using System.Windows.Forms;
 
-namespace ClaudeVpnGuard
+namespace AgentVpnGuard
 {
     internal sealed class UpdateForm : Form
     {

@@ -6,7 +6,7 @@ using System.Net.NetworkInformation;
 using System.Security.AccessControl;
 using System.Security.Principal;
 
-namespace ClaudeVpnGuard
+namespace AgentVpnGuard
 {
     internal static class SetupProfile
     {
@@ -33,6 +33,7 @@ namespace ClaudeVpnGuard
 
         public static List<SetupField> Fields()
         {
+            LegacyInstall.CopyData();
             AppSettings current = AppSettings.Load();
             var adapter = new SetupField
             {
@@ -72,7 +73,7 @@ namespace ClaudeVpnGuard
                         + "без повторных попыток:\n"
                         + "• версия программы, Windows и .NET;\n"
                         + "• текст ошибки;\n"
-                        + "• последние 100 КБ журнала C:\\ProgramData\\ClaudeVpnGuard\\log.txt: имя пользователя и компьютера Windows, "
+                        + "• последние 100 КБ журнала C:\\ProgramData\\AgentVpnGuard\\log.txt: имя пользователя и компьютера Windows, "
                         + "пути к программам Claude, названия сетевых адаптеров, адреса DNS-серверов VPN и адреса Claude внутри VPN;\n"
                         + "• IP-адрес, с которого пришёл отчёт.\n"
                         + "Отчёты видит только автор, хранятся последние 50 МБ. Изменить выбор — переустановить программу.",
@@ -83,6 +84,8 @@ namespace ClaudeVpnGuard
 
         public static void BeforeExtract(InstallRequest request, Action<int, string> report, List<string> notes)
         {
+            report(3, "Убираю прежнюю версию " + AppIdentity.LegacyName + "…");
+            LegacyInstall.Remove(request.TargetDirectory, notes);
             report(5, "Папка настроек…");
             PrepareDataDirectory();
             bool reset = request.Has(ResetSettingsKey);

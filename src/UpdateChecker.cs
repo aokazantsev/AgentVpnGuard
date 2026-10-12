@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace ClaudeVpnGuard
+namespace AgentVpnGuard
 {
     internal static class UpdateChecker
     {

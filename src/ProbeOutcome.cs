@@ -1,4 +1,4 @@
-namespace ClaudeVpnGuard
+namespace AgentVpnGuard
 {
     internal enum ProbeOutcome
     {

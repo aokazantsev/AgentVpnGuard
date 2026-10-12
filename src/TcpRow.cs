@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace ClaudeVpnGuard
+namespace AgentVpnGuard
 {
     [StructLayout(LayoutKind.Sequential)]
     internal struct TcpRow

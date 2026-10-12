@@ -1,6 +1,6 @@
-ClaudeVpnGuard.exe
-ClaudeVpnGuard.old.exe
-ClaudeVpnGuard.exe.config
+AgentVpnGuard.exe
+AgentVpnGuard.old.exe
+AgentVpnGuard.exe.config
 Uninstall.exe
 installer/obj/
 dist/

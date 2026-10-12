@@ -4,7 +4,7 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using Microsoft.Win32;
 
-namespace ClaudeVpnGuard
+namespace AgentVpnGuard
 {
     internal static class AdapterInventory
     {

@@ -4,11 +4,12 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 
-namespace ClaudeVpnGuard
+namespace AgentVpnGuard
 {
     internal sealed class ProxiedHosts
     {
         private const int DnsTimeoutMs = 2000;
+        private const int MaxNamesInNotice = 3;
         private const string ThroughVpn = "через VPN";
         private const string ThroughProxy = "через прокси VPN";
         private static readonly TimeSpan RefreshInterval = TimeSpan.FromMinutes(10);
@@ -17,6 +18,7 @@ namespace ClaudeVpnGuard
         private Dictionary<string, string> pins = NewMap();
         private Dictionary<string, string> routes = NewMap();
         private Dictionary<string, string> failures = NewMap();
+        private readonly List<string> notices = new List<string>();
         private DateTime nextRefreshUtc = DateTime.MinValue;
         private bool running;
         private int generation;
@@ -27,6 +29,7 @@ namespace ClaudeVpnGuard
             pins = NewMap();
             routes = NewMap();
             failures = NewMap();
+            notices.Clear();
             nextRefreshUtc = DateTime.MinValue;
         }
 
@@ -158,8 +161,18 @@ namespace ClaudeVpnGuard
             problems[host] = detail;
         }
 
+        public bool TakeNotices(List<string> events)
+        {
+            if (notices.Count == 0) return false;
+            events.AddRange(notices);
+            notices.Clear();
+            return true;
+        }
+
         private void LogChanges(List<string> hosts, Dictionary<string, string> found, Dictionary<string, string> how, Dictionary<string, string> problems)
         {
+            var recovered = new List<string>();
+            var lost = new Dictionary<string, List<string>>();
             foreach (string host in hosts)
             {
                 string before;
@@ -168,15 +181,42 @@ namespace ClaudeVpnGuard
                 string previousProblem;
                 pins.TryGetValue(host, out before);
                 found.TryGetValue(host, out after);
+                bool failedBefore = failures.TryGetValue(host, out previousProblem);
                 if (after != null)
                 {
                     if (after != before) AppLog.Append("proxied " + host + " → " + after + " (" + how[host] + ")");
+                    if (failedBefore) recovered.Add(host);
                     continue;
                 }
                 if (!problems.TryGetValue(host, out problem)) continue;
-                bool repeated = before == null && failures.TryGetValue(host, out previousProblem) && previousProblem == problem;
+                bool repeated = before == null && failedBefore && previousProblem == problem;
                 if (!repeated) AppLog.Append("proxied " + host + " not pinned: " + problem);
+                if (failedBefore) continue;
+                string key = (before != null ? "убраны " : "не добавлены ") + "	" + problem;
+                List<string> group;
+                if (!lost.TryGetValue(key, out group))
+                {
+                    group = new List<string>();
+                    lost[key] = group;
+                }
+                group.Add(host);
             }
+            foreach (KeyValuePair<string, List<string>> pair in lost)
+            {
+                string[] parts = pair.Key.Split('	');
+                notices.Add("Файл hosts: " + parts[0] + NameList(pair.Value) + " — " + parts[1]
+                    + ". Пока так, Claude к ним не попадёт, браузеры ходят к ним напрямую");
+            }
+            if (recovered.Count > 0)
+            {
+                notices.Add("Файл hosts: " + NameList(recovered) + " — снова через прокси VPN, записи возвращены");
+            }
+        }
+
+        private static string NameList(List<string> names)
+        {
+            if (names.Count <= MaxNamesInNotice) return string.Join(", ", names);
+            return string.Join(", ", names.GetRange(0, MaxNamesInNotice)) + " и ещё " + (names.Count - MaxNamesInNotice);
         }
 
         private static Dictionary<string, string> NewMap()

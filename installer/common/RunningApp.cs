@@ -3,7 +3,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 
-namespace ClaudeVpnGuard
+namespace AgentVpnGuard
 {
     internal static class RunningApp
     {
@@ -61,6 +61,10 @@ namespace ClaudeVpnGuard
                 return null;
             }
             catch (InvalidOperationException)
+            {
+                return null;
+            }
+            catch (NullReferenceException)
             {
                 return null;
             }

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 
-namespace ClaudeVpnGuard
+namespace AgentVpnGuard
 {
     internal static class ClaudeProcesses
     {
@@ -37,6 +37,10 @@ namespace ClaudeVpnGuard
                 return null;
             }
             catch (InvalidOperationException)
+            {
+                return null;
+            }
+            catch (NullReferenceException)
             {
                 return null;
             }

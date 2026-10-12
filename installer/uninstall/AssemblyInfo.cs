@@ -1,12 +1,12 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
 
-[assembly: AssemblyTitle("ClaudeVpnGuard Uninstall")]
-[assembly: AssemblyDescription("Удаление ClaudeVpnGuard")]
+[assembly: AssemblyTitle("AgentVpnGuard Uninstall")]
+[assembly: AssemblyDescription("Удаление AgentVpnGuard")]
 [assembly: AssemblyCompany("aokazantsev")]
-[assembly: AssemblyProduct("ClaudeVpnGuard")]
+[assembly: AssemblyProduct("AgentVpnGuard")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 aokazantsev. MIT License")]
-[assembly: AssemblyVersion("2.2.0.0")]
-[assembly: AssemblyFileVersion("2.2.0.0")]
-[assembly: AssemblyInformationalVersion("2.2")]
+[assembly: AssemblyVersion("3.0.0.0")]
+[assembly: AssemblyFileVersion("3.0.0.0")]
+[assembly: AssemblyInformationalVersion("3.0")]
 [assembly: ComVisible(false)]

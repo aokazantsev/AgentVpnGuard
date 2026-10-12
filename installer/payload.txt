@@ -1,5 +1,5 @@
-ClaudeVpnGuard.exe
-ClaudeVpnGuard.exe.config
+AgentVpnGuard.exe
+AgentVpnGuard.exe.config
 Uninstall.exe
 README.md
 LICENSE

@@ -5,7 +5,7 @@ using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Authentication;
 
-namespace ClaudeVpnGuard
+namespace AgentVpnGuard
 {
     internal static class ProxyProbe
     {
@@ -17,7 +17,7 @@ namespace ClaudeVpnGuard
             int routeIndex = RouteInspector.BestInterfaceIndex(proxy);
             if (routeIndex != vpnIndex)
             {
-                detail = "маршрут к прокси " + proxy + " идёт мимо VPN";
+                detail = "путь к прокси VPN " + proxy + " идёт мимо VPN";
                 return false;
             }
             using (var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
@@ -30,14 +30,14 @@ namespace ClaudeVpnGuard
                     IAsyncResult connecting = socket.BeginConnect(new IPEndPoint(proxy, Port), null, null);
                     if (!connecting.AsyncWaitHandle.WaitOne(TimeoutMs))
                     {
-                        detail = "прокси " + proxy + " не ответил за " + TimeoutMs / 1000 + " с";
+                        detail = "прокси VPN " + proxy + " не ответил за " + TimeoutMs / 1000 + " с";
                         return false;
                     }
                     socket.EndConnect(connecting);
                     var local = socket.LocalEndPoint as IPEndPoint;
                     if (local == null || !local.Address.Equals(vpnAddress))
                     {
-                        detail = "соединение с прокси ушло не с адреса VPN";
+                        detail = "соединение с прокси VPN ушло не с адреса VPN";
                         return false;
                     }
                     using (var stream = new NetworkStream(socket, false))
@@ -48,21 +48,21 @@ namespace ClaudeVpnGuard
                 }
                 catch (AuthenticationException)
                 {
-                    detail = "прокси " + proxy + " не отдаёт настоящий сертификат " + host;
+                    detail = "прокси VPN " + proxy + " подменяет сертификат";
                     return false;
                 }
                 catch (IOException)
                 {
-                    detail = "прокси " + proxy + " не пропускает " + host;
+                    detail = "прокси VPN " + proxy + " обрывает соединение";
                     return false;
                 }
                 catch (SocketException error)
                 {
-                    detail = "прокси " + proxy + " — " + error.Message;
+                    detail = "прокси VPN " + proxy + " не отвечает: " + error.Message;
                     return false;
                 }
             }
-            detail = "прокси " + proxy + " пропускает " + host;
+            detail = "прокси VPN " + proxy + " пропускает";
             return true;
         }
     }

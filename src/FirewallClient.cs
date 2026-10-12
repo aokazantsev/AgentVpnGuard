@@ -6,7 +6,7 @@ using System.IO;
 using System.Threading;
 using System.Windows.Forms;
 
-namespace ClaudeVpnGuard
+namespace AgentVpnGuard
 {
     internal static class FirewallClient
     {

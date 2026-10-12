@@ -1,11 +1,10 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Net.NetworkInformation;
 using System.Windows.Forms;
 
-namespace ClaudeVpnGuard
+namespace AgentVpnGuard
 {
     internal sealed class TrayApplication : ApplicationContext
     {
@@ -13,6 +12,7 @@ namespace ClaudeVpnGuard
         private const int SoonIntervalMs = 700;
         private const int BalloonMs = 6000;
         private const int MaxTrayTextLength = 63;
+        private const int MaxBalloonTextLength = 255;
 
         private readonly NotifyIcon trayIcon = new NotifyIcon();
         private readonly Control invoker = new Control();
@@ -153,17 +153,24 @@ namespace ClaudeVpnGuard
 
             if (report.Settling) return;
             settledStatus = report.Status;
-            if (!settings.Notifications) return;
             bool statusChanged = previous.HasValue && previous.Value != report.Status;
             bool firstAlarm = !previous.HasValue && report.Status != GuardStatus.Protected;
             if (statusChanged || firstAlarm)
             {
-                trayIcon.ShowBalloonTip(BalloonMs, AppIdentity.Name, report.Headline, BalloonIcon(report.Status));
+                UserJournal.Append(report.Status, report.Headline);
+                if (settings.Notifications) trayIcon.ShowBalloonTip(BalloonMs, AppIdentity.Name, report.Headline, BalloonIcon(report.Status));
             }
             else if (report.Events.Count > 0 && previous.HasValue)
             {
-                trayIcon.ShowBalloonTip(BalloonMs, AppIdentity.Name, report.Events[0], ToolTipIcon.Info);
+                foreach (string line in report.Events) UserJournal.Append(null, line);
+                if (settings.Notifications) trayIcon.ShowBalloonTip(BalloonMs, AppIdentity.Name, BalloonText(report.Events), ToolTipIcon.Info);
             }
+        }
+
+        private static string BalloonText(List<string> events)
+        {
+            string text = string.Join(Environment.NewLine, events);
+            return text.Length > MaxBalloonTextLength ? text.Substring(0, MaxBalloonTextLength - 1) + "…" : text;
         }
 
         private static ToolTipIcon BalloonIcon(GuardStatus status)
@@ -182,7 +189,7 @@ namespace ClaudeVpnGuard
                     forceFullSync = true;
                     Refresh();
                 },
-                ShowSettings, OpenLog, ToggleStartup, ToggleProtection, ConfirmExit);
+                ShowSettings, JournalForm.ShowSingle, ToggleStartup, ToggleProtection, ConfirmExit);
             e.Cancel = false;
         }
 
@@ -241,12 +248,6 @@ namespace ClaudeVpnGuard
             AppLog.Append("protection " + (enable ? "enabled" : "disabled"));
             forceFullSync = true;
             Refresh();
-        }
-
-        private static void OpenLog()
-        {
-            if (!File.Exists(AppLog.FilePath)) AppLog.Append("log opened");
-            Process.Start(new ProcessStartInfo("notepad.exe", "\"" + AppLog.FilePath + "\"") { UseShellExecute = false });
         }
 
         private void ConfirmExit()

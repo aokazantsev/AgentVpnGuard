@@ -6,7 +6,7 @@ using System.Net.Sockets;
 using System.Security.Principal;
 using System.Threading;
 
-namespace ClaudeVpnGuard
+namespace AgentVpnGuard
 {
     internal sealed class GuardEngine
     {
@@ -26,6 +26,7 @@ namespace ClaudeVpnGuard
         private readonly Action changed;
         private AppSettings settings;
         private Dictionary<string, string> pins;
+        private Dictionary<string, string> written;
         private string lastSignature;
         private DateTime lastFullSyncUtc = DateTime.MinValue;
         private DateTime nextDnsRefreshUtc = DateTime.MinValue;
@@ -58,6 +59,7 @@ namespace ClaudeVpnGuard
             this.post = post;
             this.changed = changed;
             pins = SafeReadPins();
+            written = new Dictionary<string, string>(pins, StringComparer.OrdinalIgnoreCase);
         }
 
         public void RetryFirewall()
@@ -120,7 +122,7 @@ namespace ClaudeVpnGuard
             RefreshPins(vpn, now);
             Trace("dns refresh: running=" + dnsRefreshRunning);
             RefreshProxied(vpn, now);
-            WritePins(report);
+            WritePins(report, vpn);
             Trace("hosts done");
             AuditConnections(report, running, adapters);
             Trace("connections audited");
@@ -387,14 +389,20 @@ namespace ClaudeVpnGuard
             return hosts;
         }
 
-        private void WritePins(GuardReport report)
+        private void WritePins(GuardReport report, NetworkAdapter vpn)
         {
             var hosts = new List<string>(settings.PinnedHosts);
             var addresses = new Dictionary<string, string>(pins, StringComparer.OrdinalIgnoreCase);
             proxied.AddTo(hosts, addresses);
+            bool explained = proxied.TakeNotices(report.Events);
             try
             {
-                if (HostsPinner.Apply(hosts, addresses) && !firstEvaluation) report.Events.Add("Блок в hosts обновлён");
+                Dictionary<string, string> block = HostsPinner.Block(hosts, addresses);
+                if (HostsPinner.Apply(hosts, addresses) && !firstEvaluation && !explained)
+                {
+                    report.Events.Add(HostsChange.Describe(written, block, vpn == null));
+                }
+                written = block;
             }
             catch (IOException error)
             {

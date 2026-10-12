@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace ClaudeVpnGuard
+namespace AgentVpnGuard
 {
     internal sealed class FirewallRequest
     {

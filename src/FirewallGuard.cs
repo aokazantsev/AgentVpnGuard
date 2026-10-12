@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Runtime.InteropServices;
 
-namespace ClaudeVpnGuard
+namespace AgentVpnGuard
 {
     internal static class FirewallGuard
     {

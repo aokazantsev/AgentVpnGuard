@@ -3,7 +3,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 
-namespace ClaudeVpnGuard
+namespace AgentVpnGuard
 {
     internal static class RouteInspector
     {

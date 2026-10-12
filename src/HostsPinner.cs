@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 
-namespace ClaudeVpnGuard
+namespace AgentVpnGuard
 {
     internal static class HostsPinner
     {
@@ -13,6 +13,8 @@ namespace ClaudeVpnGuard
 
         private const string BeginMarker = "# " + AppIdentity.Name + " begin";
         private const string EndMarker = "# " + AppIdentity.Name + " end";
+        private const string LegacyBeginMarker = "# " + AppIdentity.LegacyName + " begin";
+        private const string LegacyEndMarker = "# " + AppIdentity.LegacyName + " end";
         private const int WriteAttempts = 5;
         private const int WriteRetryMs = 200;
 
@@ -25,8 +27,8 @@ namespace ClaudeVpnGuard
             foreach (string line in ReadLines())
             {
                 string trimmed = line.Trim();
-                if (trimmed == BeginMarker) inside = true;
-                else if (trimmed == EndMarker) inside = false;
+                if (trimmed == BeginMarker || trimmed == LegacyBeginMarker) inside = true;
+                else if (trimmed == EndMarker || trimmed == LegacyEndMarker) inside = false;
                 else if (inside && trimmed.Length > 0 && !trimmed.StartsWith("#"))
                 {
                     string[] parts = trimmed.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
@@ -34,6 +36,18 @@ namespace ClaudeVpnGuard
                 }
             }
             return pins;
+        }
+
+        public static Dictionary<string, string> Block(IList<string> hosts, IDictionary<string, string> pins)
+        {
+            var block = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string host in hosts)
+            {
+                string address;
+                if (!pins.TryGetValue(host, out address)) address = BlackholeAddress;
+                block[host] = address;
+            }
+            return block;
         }
 
         public static bool Apply(IList<string> hosts, IDictionary<string, string> pins)
@@ -65,8 +79,8 @@ namespace ClaudeVpnGuard
             foreach (string line in SplitLines(text))
             {
                 string trimmed = line.Trim();
-                if (trimmed == BeginMarker) inside = true;
-                else if (trimmed == EndMarker) inside = false;
+                if (trimmed == BeginMarker || trimmed == LegacyBeginMarker) inside = true;
+                else if (trimmed == EndMarker || trimmed == LegacyEndMarker) inside = false;
                 else if (!inside) kept.Add(line);
             }
             while (kept.Count > 0 && kept[kept.Count - 1].Trim().Length == 0) kept.RemoveAt(kept.Count - 1);

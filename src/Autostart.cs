@@ -6,7 +6,7 @@ using System.Security;
 using System.Security.Principal;
 using System.Text;
 
-namespace ClaudeVpnGuard
+namespace AgentVpnGuard
 {
     internal static class Autostart
     {

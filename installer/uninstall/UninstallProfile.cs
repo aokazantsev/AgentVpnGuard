@@ -4,7 +4,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 
-namespace ClaudeVpnGuard
+namespace AgentVpnGuard
 {
     internal static class UninstallProfile
     {

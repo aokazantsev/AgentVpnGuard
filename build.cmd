@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-set APP=ClaudeVpnGuard
+set APP=AgentVpnGuard
 set REFS=/r:System.Windows.Forms.dll /r:System.Drawing.dll /r:Microsoft.CSharp.dll /r:System.Core.dll /r:System.ServiceProcess.dll
 set EXTRA=
 

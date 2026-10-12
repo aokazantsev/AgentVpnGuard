@@ -4,7 +4,7 @@ using System.Security;
 using System.Threading;
 using System.Windows.Forms;
 
-namespace ClaudeVpnGuard
+namespace AgentVpnGuard
 {
     internal static class Program
     {

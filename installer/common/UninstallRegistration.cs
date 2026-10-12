@@ -1,7 +1,7 @@
 using System.IO;
 using Microsoft.Win32;
 
-namespace ClaudeVpnGuard
+namespace AgentVpnGuard
 {
     internal static class UninstallRegistration
     {

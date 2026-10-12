@@ -1,7 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 
-namespace ClaudeVpnGuard
+namespace AgentVpnGuard
 {
     internal static class FirewallWorker
     {

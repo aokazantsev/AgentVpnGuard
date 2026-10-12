@@ -4,7 +4,7 @@ using System.IO;
 using System.Net;
 using System.Runtime.InteropServices;
 
-namespace ClaudeVpnGuard
+namespace AgentVpnGuard
 {
     internal static class ConnectionAuditor
     {

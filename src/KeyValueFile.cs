@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 
-namespace ClaudeVpnGuard
+namespace AgentVpnGuard
 {
     internal sealed class KeyValueFile
     {

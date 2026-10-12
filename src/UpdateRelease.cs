@@ -1,6 +1,6 @@
 using System;
 
-namespace ClaudeVpnGuard
+namespace AgentVpnGuard
 {
     internal sealed class UpdateRelease
     {

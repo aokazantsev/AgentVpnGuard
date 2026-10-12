@@ -4,7 +4,7 @@ using System.ComponentModel;
 using System.ServiceProcess;
 using Microsoft.Win32;
 
-namespace ClaudeVpnGuard
+namespace AgentVpnGuard
 {
     internal static class FirewallHealth
     {

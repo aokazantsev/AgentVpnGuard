@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Net;
 
-namespace ClaudeVpnGuard
+namespace AgentVpnGuard
 {
     internal sealed class NetworkAdapter
     {

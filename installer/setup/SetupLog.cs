@@ -3,7 +3,7 @@ using System.IO;
 using System.Security.Principal;
 using System.Text;
 
-namespace ClaudeVpnGuard
+namespace AgentVpnGuard
 {
     internal static class SetupLog
     {
