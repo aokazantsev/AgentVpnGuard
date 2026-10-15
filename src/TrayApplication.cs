@@ -113,6 +113,8 @@ namespace AgentVpnGuard
         {
             string profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             Watch(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Claude"));
+            Watch(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Claude-NativeHost"));
+            foreach (string packagedRoaming in ClaudeExecutables.PackagedRoamingFolders()) Watch(packagedRoaming);
             Watch(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AnthropicClaude"));
             Watch(Path.Combine(profile, @".local\bin"));
             Watch(Path.Combine(profile, @".vscode\extensions"));

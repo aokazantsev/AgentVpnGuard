@@ -52,6 +52,7 @@ namespace AgentVpnGuard
         private DateTime lastTeardownUtc = DateTime.MinValue;
         private List<string> teardownProblems = new List<string>();
         private readonly ProxiedHosts proxied = new ProxiedHosts();
+        private readonly HashSet<string> announcedStrayExecutables = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         public GuardEngine(AppSettings settings, Action<Action> post, Action changed)
         {
@@ -105,12 +106,16 @@ namespace AgentVpnGuard
                     + ", up=" + adapter.IsUp + ", addresses=" + adapter.Addresses.Count + ", dns=" + adapter.DnsServers.Count + ", index=" + adapter.Ipv4Index);
             }
             SortedSet<string> executables = ClaudeExecutables.Find(settings);
+            foreach (string stray in announcedStrayExecutables)
+            {
+                if (File.Exists(stray)) executables.Add(stray);
+            }
             Trace("executables: " + executables.Count + (executables.Count > 0 ? " — " + string.Join("; ", executables) : ""));
             Dictionary<int, string> running = ClaudeProcesses.Running(executables);
             Trace("running claude processes: " + running.Count);
             foreach (string path in running.Values)
             {
-                if (executables.Add(path)) report.Events.Add("Найден запущенный Claude вне известных папок: " + path);
+                if (executables.Add(path) && announcedStrayExecutables.Add(path)) report.Events.Add("Найден запущенный Claude вне известных папок: " + path);
             }
             report.Executables.AddRange(executables);
 

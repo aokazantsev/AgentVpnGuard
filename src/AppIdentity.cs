@@ -7,7 +7,7 @@ namespace AgentVpnGuard
     {
         public const string Name = "AgentVpnGuard";
         public const string LegacyName = "ClaudeVpnGuard";
-        public const string Version = "3.0";
+        public const string Version = "3.1";
         public const string ExecutableName = "AgentVpnGuard.exe";
         public const string ProcessName = "AgentVpnGuard";
         public const string UninstallerName = "Uninstall.exe";

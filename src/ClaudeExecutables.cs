@@ -18,8 +18,8 @@ namespace AgentVpnGuard
             string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             string profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
-            AddVersioned(found, Path.Combine(roaming, @"Claude\claude-code"), "claude.exe");
-            AddFiles(found, Path.Combine(roaming, @"Claude\ChromeNativeHost"), "*.exe");
+            AddRoaming(found, roaming);
+            foreach (string packagedRoaming in PackagedRoamingFolders()) AddRoaming(found, packagedRoaming);
             AddFile(found, Path.Combine(profile, @".local\bin\claude.exe"));
             AddFile(found, Path.Combine(local, @"AnthropicClaude\claude.exe"));
             AddPrefixed(found, Path.Combine(local, "AnthropicClaude"), "app-", "claude.exe");
@@ -35,6 +35,31 @@ namespace AgentVpnGuard
             return found;
         }
 
+        public static List<string> PackagedRoamingFolders()
+        {
+            var folders = new List<string>();
+            string packagesRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Packages");
+            if (!Directory.Exists(packagesRoot)) return folders;
+            try
+            {
+                foreach (string package in Directory.GetDirectories(packagesRoot))
+                {
+                    string name = Path.GetFileName(package);
+                    if (!name.StartsWith("Claude_", StringComparison.OrdinalIgnoreCase)
+                        && name.IndexOf(".Claude_", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    string roaming = Path.Combine(package, @"LocalCache\Roaming");
+                    if (Directory.Exists(roaming)) folders.Add(roaming);
+                }
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+            return folders;
+        }
+
         public static bool LooksLikeClaude(string path)
         {
             string name = Path.GetFileNameWithoutExtension(path);
@@ -44,6 +69,13 @@ namespace AgentVpnGuard
                     && path.IndexOf("claude", StringComparison.OrdinalIgnoreCase) >= 0) return true;
             }
             return false;
+        }
+
+        private static void AddRoaming(SortedSet<string> found, string roaming)
+        {
+            AddVersioned(found, Path.Combine(roaming, @"Claude\claude-code"), "claude.exe");
+            AddFiles(found, Path.Combine(roaming, @"Claude\ChromeNativeHost"), "*.exe");
+            AddVersioned(found, Path.Combine(roaming, "Claude-NativeHost"), "chrome-native-host.exe");
         }
 
         private static void AddVersioned(SortedSet<string> found, string root, string fileName)
