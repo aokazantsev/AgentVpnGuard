@@ -10,6 +10,7 @@ namespace AgentVpnGuard
     {
         private const int DnsTimeoutMs = 2000;
         private const int MaxNamesInNotice = 3;
+        private const int FailuresBeforeUnpin = 2;
         private const string ThroughVpn = "через VPN";
         private const string ThroughProxy = "через прокси VPN";
         private static readonly TimeSpan RefreshInterval = TimeSpan.FromMinutes(10);
@@ -18,6 +19,7 @@ namespace AgentVpnGuard
         private Dictionary<string, string> pins = NewMap();
         private Dictionary<string, string> routes = NewMap();
         private Dictionary<string, string> failures = NewMap();
+        private Dictionary<string, int> strikes = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         private readonly List<string> notices = new List<string>();
         private DateTime nextRefreshUtc = DateTime.MinValue;
         private bool running;
@@ -26,10 +28,30 @@ namespace AgentVpnGuard
         public void Reset()
         {
             generation++;
+            running = false;
             pins = NewMap();
             routes = NewMap();
             failures = NewMap();
+            strikes = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             notices.Clear();
+            nextRefreshUtc = DateTime.MinValue;
+        }
+
+        public void Seed(List<string> hosts, Dictionary<string, string> known, string proxyPin)
+        {
+            foreach (string host in hosts)
+            {
+                string address;
+                if (!known.TryGetValue(host, out address) || address == HostsPinner.BlackholeAddress) continue;
+                pins[host] = address;
+                routes[host] = address == proxyPin ? ThroughProxy : ThroughVpn;
+            }
+        }
+
+        public void Restart()
+        {
+            generation++;
+            running = false;
             nextRefreshUtc = DateTime.MinValue;
         }
 
@@ -64,22 +86,52 @@ namespace AgentVpnGuard
                 }
                 post(() =>
                 {
+                    if (started != generation)
+                    {
+                        changed();
+                        return;
+                    }
                     running = false;
-                    if (started != generation) return;
+                    bool kept = KeepAfterSingleFailure(targets, found, how, problems);
                     LogChanges(targets, found, how, problems);
                     pins = found;
                     routes = how;
                     failures = problems;
-                    nextRefreshUtc = DateTime.UtcNow + (problems.Count == 0 ? RefreshInterval : RetryInterval);
+                    nextRefreshUtc = DateTime.UtcNow + (problems.Count == 0 && !kept ? RefreshInterval : RetryInterval);
                     changed();
                 });
             });
         }
 
-        public void AddTo(List<string> hosts, Dictionary<string, string> addresses)
+        private bool KeepAfterSingleFailure(List<string> hosts, Dictionary<string, string> found, Dictionary<string, string> how, Dictionary<string, string> problems)
+        {
+            bool kept = false;
+            var counted = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (string host in hosts)
+            {
+                string previous;
+                string problem;
+                if (found.ContainsKey(host) || !problems.TryGetValue(host, out problem) || !pins.TryGetValue(host, out previous)) continue;
+                int count;
+                strikes.TryGetValue(host, out count);
+                count++;
+                if (count >= FailuresBeforeUnpin) continue;
+                counted[host] = count;
+                found[host] = previous;
+                how[host] = routes[host];
+                problems.Remove(host);
+                AppLog.Append("proxied " + host + " check failed once, kept: " + problem);
+                kept = true;
+            }
+            strikes = counted;
+            return kept;
+        }
+
+        public void AddTo(List<string> current, List<string> hosts, Dictionary<string, string> addresses)
         {
             foreach (KeyValuePair<string, string> pair in pins)
             {
+                if (!current.Exists(host => string.Equals(host, pair.Key, StringComparison.OrdinalIgnoreCase))) continue;
                 if (hosts.Exists(host => string.Equals(host, pair.Key, StringComparison.OrdinalIgnoreCase))) continue;
                 hosts.Add(pair.Key);
                 addresses[pair.Key] = pair.Value;

@@ -4,7 +4,7 @@ cd /d "%~dp0"
 set APP=AgentVpnGuard
 set CSC="%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 set REFS=/r:System.Windows.Forms.dll /r:System.Drawing.dll /r:Microsoft.CSharp.dll /r:System.Core.dll /r:System.ServiceProcess.dll
-set SHARED=src\AppIdentity.cs src\Autostart.cs
+set SHARED=src\AppIdentity.cs src\Autostart.cs src\SystemTools.cs
 set UNINSTALL_EXTRA=src\HostsPinner.cs
 set SETUP_EXTRA=src\AppSettings.cs src\FirewallHealth.cs src\CrashReportConsent.cs
 set PREBUILD=

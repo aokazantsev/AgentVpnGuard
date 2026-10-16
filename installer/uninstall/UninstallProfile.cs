@@ -16,7 +16,11 @@ namespace AgentVpnGuard
         public static void Remove(List<string> problems)
         {
             string firewallProblem = RemoveFirewallRules();
-            if (firewallProblem != null) problems.Add("правила брандмауэра (группа «" + AppIdentity.FirewallGroup + "») не сняты: " + firewallProblem);
+            if (firewallProblem != null)
+            {
+                problems.Add("правила брандмауэра (группа «" + AppIdentity.FirewallGroup + "») не сняты: " + firewallProblem
+                    + ". Пока они стоят, у Claude нет сети вне VPN: удали правила группы в «Брандмауэр Защитника Windows» или установи программу заново и удали ещё раз");
+            }
             try
             {
                 HostsPinner.Remove();
@@ -35,8 +39,9 @@ namespace AgentVpnGuard
         {
             string script = "$ErrorActionPreference='Stop'; "
                 + "Get-NetFirewallRule -Group '" + AppIdentity.FirewallGroup + "' -ErrorAction SilentlyContinue | Remove-NetFirewallRule; "
+                + "Get-NetFirewallRule -Group '" + AppIdentity.LegacyName + "' -ErrorAction SilentlyContinue | Remove-NetFirewallRule -ErrorAction SilentlyContinue; "
                 + "if (Get-NetFirewallRule -Group '" + AppIdentity.FirewallGroup + "' -ErrorAction SilentlyContinue) { exit 3 }";
-            var start = new ProcessStartInfo("powershell.exe", "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"" + script + "\"")
+            var start = new ProcessStartInfo(SystemTools.PowerShell, "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"" + script + "\"")
             {
                 UseShellExecute = false,
                 CreateNoWindow = true
@@ -47,7 +52,16 @@ namespace AgentVpnGuard
                 {
                     if (!process.WaitForExit(FirewallTimeoutMs))
                     {
-                        process.Kill();
+                        try
+                        {
+                            process.Kill();
+                        }
+                        catch (Win32Exception)
+                        {
+                        }
+                        catch (InvalidOperationException)
+                        {
+                        }
                         return "PowerShell не ответил за " + FirewallTimeoutMs / 1000 + " с";
                     }
                     return process.ExitCode == 0 ? null : "PowerShell завершился с кодом " + process.ExitCode;

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Principal;
@@ -11,6 +12,7 @@ namespace AgentVpnGuard
     internal sealed class GuardEngine
     {
         private const int DnsTimeoutMs = 2000;
+        private const string AwaitingDns = "Узнаю адреса Claude у DNS VPN…";
         private const int LeakTicksBeforeAlarm = 2;
         private const int TracedEvaluations = 3;
         private static readonly TimeSpan FullSyncInterval = TimeSpan.FromMinutes(5);
@@ -32,10 +34,16 @@ namespace AgentVpnGuard
         private DateTime nextDnsRefreshUtc = DateTime.MinValue;
         private DateTime lastProbeUtc = DateTime.MinValue;
         private bool dnsRefreshRunning;
+        private int dnsRefreshSession = -1;
+        private string freshProbePin;
         private bool probeRunning;
         private ProbeOutcome? probeOutcome;
         private string probeDetail;
         private bool wasVpnUp;
+        private string vpnKey;
+        private int session;
+        private int pinsSession = -1;
+        private HashSet<string> reportedLeaks = new HashSet<string>();
         private DateTime vpnUpSinceUtc = DateTime.MinValue;
         private bool firstEvaluation = true;
         private int leakTicks;
@@ -61,6 +69,7 @@ namespace AgentVpnGuard
             this.changed = changed;
             pins = SafeReadPins();
             written = new Dictionary<string, string>(pins, StringComparer.OrdinalIgnoreCase);
+            foreach (string stray in StrayExecutables.Load()) announcedStrayExecutables.Add(stray);
         }
 
         public void RetryFirewall()
@@ -72,8 +81,16 @@ namespace AgentVpnGuard
 
         public void Reconfigure(AppSettings newSettings)
         {
+            bool vpnInputsChanged = !SameList(settings.VpnAdapters, newSettings.VpnAdapters)
+                || !SameList(settings.PinnedHosts, newSettings.PinnedHosts)
+                || settings.ProtectionEnabled != newSettings.ProtectionEnabled;
+            bool proxiedChanged = !SameList(settings.ProxiedHosts, newSettings.ProxiedHosts);
             settings = newSettings;
+            if (proxiedChanged && !vpnInputsChanged) proxied.Restart();
+            if (!vpnInputsChanged) return;
             lastSignature = null;
+            session++;
+            freshProbePin = null;
             nextDnsRefreshUtc = DateTime.MinValue;
             lastProbeUtc = DateTime.MinValue;
             probeOutcome = null;
@@ -115,15 +132,18 @@ namespace AgentVpnGuard
             Trace("running claude processes: " + running.Count);
             foreach (string path in running.Values)
             {
-                if (executables.Add(path) && announcedStrayExecutables.Add(path)) report.Events.Add("Найден запущенный Claude вне известных папок: " + path);
+                if (!executables.Add(path) || !announcedStrayExecutables.Add(path)) continue;
+                StrayExecutables.Save(announcedStrayExecutables);
+                report.Events.Add("Найден запущенный Claude вне известных папок: " + path);
             }
             report.Executables.AddRange(executables);
 
-            SyncFirewall(report, executables, adapters, forceFullSync, now);
-            Trace("firewall done, problems=" + report.Problems.Count);
             NetworkAdapter vpn = adapters.ActiveVpn;
             Trace("active vpn: " + (vpn == null ? "none" : vpn.Name));
             TrackVpn(report, vpn, now);
+            if (firstEvaluation && vpn != null) proxied.Seed(ProxiedOnly(), pins, ProxyPin());
+            SyncFirewall(report, executables, adapters, vpn, forceFullSync, now);
+            Trace("firewall done, problems=" + report.Problems.Count);
             RefreshPins(vpn, now);
             Trace("dns refresh: running=" + dnsRefreshRunning);
             RefreshProxied(vpn, now);
@@ -138,10 +158,9 @@ namespace AgentVpnGuard
             return report;
         }
 
-        private void SyncFirewall(GuardReport report, SortedSet<string> executables, AdapterSnapshot adapters, bool forceFullSync, DateTime now)
+        private void SyncFirewall(GuardReport report, SortedSet<string> executables, AdapterSnapshot adapters, NetworkAdapter vpn, bool forceFullSync, DateTime now)
         {
-            bool cutOff = probeOutcome != ProbeOutcome.Reachable;
-            List<string> interfaces = adapters.BlockedInterfaceNames(cutOff);
+            List<string> interfaces = adapters.BlockedInterfaceNames(probeOutcome == ProbeOutcome.Reachable ? vpn : null);
             string signature = string.Join("|", executables) + "#" + string.Join("|", interfaces);
             string serviceProblem = FirewallHealth.ServiceProblem();
             if (serviceProblem != null)
@@ -168,7 +187,7 @@ namespace AgentVpnGuard
             request.Interfaces.AddRange(interfaces);
             request.AppliedInterfaces.AddRange(appliedInterfaces);
             bool announceAdded = !firstEvaluation;
-            bool announceRepaired = !inputsChanged;
+            bool announceRepaired = !inputsChanged && firewallSynced;
             firewallRunning = true;
             if (syncDue) lastFullSyncUtc = now;
             lastVerifyUtc = now;
@@ -179,6 +198,7 @@ namespace AgentVpnGuard
         private GuardReport EvaluateDisabled(GuardReport report, DateTime now)
         {
             firstEvaluation = false;
+            firewallEvents.Clear();
             if (!teardownDone && !firewallRunning && now - lastTeardownUtc > TeardownRetryInterval) StartTeardown(now);
             report.Problems.AddRange(teardownProblems);
             if (report.Problems.Count > 0)
@@ -203,6 +223,7 @@ namespace AgentVpnGuard
             firewallRunning = true;
             lastTeardownUtc = now;
             AppLog.Append("protection off: removing firewall rules and hosts block");
+            if (RemoveHostsBlock() == null) written = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var request = new FirewallRequest { RemoveAll = true, Trace = AppLog.TraceEnabled };
             FirewallClient.RunAsync(request, (result, failure) => post(() => OnTeardownDone(result, failure)));
         }
@@ -230,6 +251,7 @@ namespace AgentVpnGuard
             }
             string hostsProblem = RemoveHostsBlock();
             if (hostsProblem != null) problems.Add(hostsProblem);
+            else written = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             teardownProblems = problems;
             teardownDone = problems.Count == 0;
             if (teardownDone) AppLog.Append("protection off: rules removed " + result.Removed + ", hosts block cleared");
@@ -271,6 +293,7 @@ namespace AgentVpnGuard
                 firewallSynced = false;
                 firewallDrift = false;
                 lastSignature = signature;
+                RetrySyncSoon();
                 firewallProblems = new List<string> { "Брандмауэр Windows не принимает правила (" + failure + ") — защита не работает" };
                 changed();
                 return;
@@ -290,41 +313,65 @@ namespace AgentVpnGuard
                 appliedInterfaces = result.AppliedInterfaces;
                 lastSignature = signature;
                 firewallSynced = result.Errors.Count == 0;
+                if (!firewallSynced) RetrySyncSoon();
                 if (result.Added > 0 && announceAdded) firewallEvents.Add("Под защиту взято программ: " + result.Added);
                 if (result.Repaired > 0 && announceRepaired) firewallEvents.Add("Правила брандмауэра были изменены извне и восстановлены: " + result.Repaired);
             }
             changed();
         }
 
+        private void RetrySyncSoon()
+        {
+            lastFullSyncUtc = DateTime.UtcNow - FullSyncInterval + VerifyInterval;
+        }
+
         private void TrackVpn(GuardReport report, NetworkAdapter vpn, DateTime now)
         {
             bool vpnUp = vpn != null;
+            string key = vpnUp ? vpn.Name + "#" + vpn.Ipv4Index : null;
+            if (vpnUp && wasVpnUp && key != vpnKey)
+            {
+                session++;
+                freshProbePin = null;
+                vpnUpSinceUtc = now;
+                nextDnsRefreshUtc = DateTime.MinValue;
+                lastProbeUtc = DateTime.MinValue;
+                probeOutcome = null;
+                proxied.Reset();
+                report.Events.Add("VPN переключён на " + vpn.Name);
+            }
+            vpnKey = key;
             if (vpnUp && !wasVpnUp)
             {
+                session++;
+                freshProbePin = null;
                 vpnUpSinceUtc = firstEvaluation ? DateTime.MinValue : now;
                 nextDnsRefreshUtc = DateTime.MinValue;
                 lastProbeUtc = DateTime.MinValue;
                 probeOutcome = null;
                 proxied.Reset();
-                if (!firstEvaluation) report.Events.Add("VPN подключён");
             }
             if (!vpnUp && wasVpnUp)
             {
+                session++;
+                freshProbePin = null;
                 probeOutcome = null;
                 proxied.Reset();
-                report.Events.Add("VPN отключён — у Claude нет сети");
             }
             wasVpnUp = vpnUp;
         }
 
         private void RefreshPins(NetworkAdapter vpn, DateTime now)
         {
-            if (vpn == null || dnsRefreshRunning || now < nextDnsRefreshUtc || vpn.DnsServers.Count == 0) return;
+            if (vpn != null && vpn.DnsServers.Count == 0) pinsSession = session;
+            if (vpn == null || vpn.Ipv4Address == null || (dnsRefreshRunning && dnsRefreshSession == session) || now < nextDnsRefreshUtc || vpn.DnsServers.Count == 0) return;
             dnsRefreshRunning = true;
+            dnsRefreshSession = session;
             var hosts = new List<string>(settings.PinnedHosts);
             if (!hosts.Contains(ClaudeProbe.Host)) hosts.Add(ClaudeProbe.Host);
             var servers = new List<IPAddress>(vpn.DnsServers);
             int vpnIndex = vpn.Ipv4Index;
+            int started = session;
             bool traced = evaluations <= TracedEvaluations;
             ThreadPool.QueueUserWorkItem(state =>
             {
@@ -332,7 +379,17 @@ namespace AgentVpnGuard
                 try
                 {
                     if (traced) AppLog.Append("dns: asking " + string.Join(", ", servers) + " for " + hosts.Count + " names");
-                    resolved = ResolveThroughVpn(hosts, servers, vpnIndex);
+                    Dictionary<string, string> probeAddress = ResolveThroughVpn(new List<string> { ClaudeProbe.Host }, servers, vpnIndex);
+                    post(() =>
+                    {
+                        if (started != session) return;
+                        string address;
+                        freshProbePin = probeAddress.TryGetValue(ClaudeProbe.Host, out address) ? address : null;
+                        pinsSession = session;
+                        changed();
+                    });
+                    resolved = ResolveThroughVpn(hosts.FindAll(host => !string.Equals(host, ClaudeProbe.Host, StringComparison.OrdinalIgnoreCase)), servers, vpnIndex);
+                    foreach (KeyValuePair<string, string> pair in probeAddress) resolved[pair.Key] = pair.Value;
                     if (traced) AppLog.Append("dns: resolved " + resolved.Count + " of " + hosts.Count);
                 }
                 catch (Exception error)
@@ -342,8 +399,15 @@ namespace AgentVpnGuard
                 }
                 post(() =>
                 {
-                    dnsRefreshRunning = false;
-                    bool complete = resolved.Count == hosts.Count;
+                    if (started == dnsRefreshSession) dnsRefreshRunning = false;
+                    if (started != session)
+                    {
+                        changed();
+                        return;
+                    }
+                    pinsSession = session;
+                    freshProbePin = null;
+                    bool complete = resolved.Count == hosts.Count && resolved.Values.Any(address => address != HostsPinner.BlackholeAddress);
                     nextDnsRefreshUtc = DateTime.UtcNow + (complete ? DnsRefreshInterval : DnsRetryInterval);
                     foreach (KeyValuePair<string, string> pair in resolved) pins[pair.Key] = pair.Value;
                     changed();
@@ -379,9 +443,14 @@ namespace AgentVpnGuard
         private void RefreshProxied(NetworkAdapter vpn, DateTime now)
         {
             if (dnsRefreshRunning) return;
+            proxied.Refresh(ProxiedOnly(), vpn, ProxyPin(), now, post, changed);
+        }
+
+        private string ProxyPin()
+        {
             string proxyPin;
             pins.TryGetValue(ClaudeProbe.Host, out proxyPin);
-            proxied.Refresh(ProxiedOnly(), vpn, proxyPin, now, post, changed);
+            return proxyPin;
         }
 
         private List<string> ProxiedOnly()
@@ -398,12 +467,12 @@ namespace AgentVpnGuard
         {
             var hosts = new List<string>(settings.PinnedHosts);
             var addresses = new Dictionary<string, string>(pins, StringComparer.OrdinalIgnoreCase);
-            proxied.AddTo(hosts, addresses);
+            proxied.AddTo(ProxiedOnly(), hosts, addresses);
             bool explained = proxied.TakeNotices(report.Events);
             try
             {
                 Dictionary<string, string> block = HostsPinner.Block(hosts, addresses);
-                if (HostsPinner.Apply(hosts, addresses) && !firstEvaluation && !explained)
+                if (HostsPinner.Apply(block) && !firstEvaluation && !explained)
                 {
                     report.Events.Add(HostsChange.Describe(written, block, vpn == null));
                 }
@@ -421,31 +490,41 @@ namespace AgentVpnGuard
 
         private void AuditConnections(GuardReport report, Dictionary<int, string> running, AdapterSnapshot adapters)
         {
-            ConnectionAudit audit = ConnectionAuditor.Audit(running, adapters, true);
+            ConnectionAudit audit = ConnectionAuditor.Audit(running, adapters);
             if (audit.Leaks.Count == 0)
             {
                 leakTicks = 0;
+                reportedLeaks.Clear();
                 return;
             }
             leakTicks++;
-            report.Events.Add("Соединения Claude мимо VPN: " + string.Join(", ", audit.Leaks) + (audit.Closed > 0 ? " — закрыто " + audit.Closed : ""));
+            List<string> fresh = audit.Leaks.FindAll(leak => !reportedLeaks.Contains(leak));
+            reportedLeaks = new HashSet<string>(audit.Leaks);
+            if (fresh.Count > 0) report.Events.Add("Соединения Claude мимо VPN: " + string.Join(", ", fresh) + (audit.Closed > 0 ? " — закрыто " + audit.Closed : ""));
             if (leakTicks >= LeakTicksBeforeAlarm) report.Problems.Add("Claude открывает соединения мимо VPN: " + audit.Leaks[0]);
         }
 
         private void StartProbe(NetworkAdapter vpn, DateTime now)
         {
             TimeSpan interval = probeOutcome == ProbeOutcome.Reachable ? ProbeInterval : ProbeRetryInterval;
-            if (vpn == null || probeRunning || now - lastProbeUtc < interval) return;
+            if (vpn == null || probeRunning || pinsSession != session || now - lastProbeUtc < interval) return;
             string pinned;
             IPAddress target;
             IPAddress vpnAddress = vpn.Ipv4Address;
-            if (!pins.TryGetValue(ClaudeProbe.Host, out pinned) || pinned == HostsPinner.BlackholeAddress
+            pinned = freshProbePin;
+            if ((pinned == null && !pins.TryGetValue(ClaudeProbe.Host, out pinned)) || pinned == HostsPinner.BlackholeAddress
                 || !IPAddress.TryParse(pinned, out target) || vpnAddress == null) return;
             probeRunning = true;
             lastProbeUtc = now;
+            int started = session;
             ClaudeProbe.CheckAsync(target, vpnAddress, vpn.Ipv4Index, (outcome, detail) => post(() =>
             {
                 probeRunning = false;
+                if (started != session)
+                {
+                    changed();
+                    return;
+                }
                 ProbeOutcome? previous = probeOutcome;
                 probeOutcome = outcome;
                 probeDetail = detail;
@@ -487,6 +566,13 @@ namespace AgentVpnGuard
             }
             report.Details.Add("VPN: " + vpn.Name + " (" + vpn.Description + ")");
             var warnings = new List<string>();
+            if (probeOutcome == ProbeOutcome.Bypass && now - vpnUpSinceUtc < ConnectGrace)
+            {
+                report.Status = GuardStatus.Offline;
+                report.Headline = "VPN подключается…";
+                report.Settling = true;
+                return;
+            }
             if (probeOutcome == ProbeOutcome.Bypass)
             {
                 report.Details.Add("Проверка Claude: " + probeDetail);
@@ -503,17 +589,21 @@ namespace AgentVpnGuard
             {
                 report.Details.Add("Проверка Claude: " + probeDetail + " отвечает через VPN");
             }
+            if (vpn.Ipv4Address == null) warnings.Add("У адаптера VPN нет адреса IPv4 — у Claude нет сети");
             foreach (string host in settings.CriticalHosts)
             {
                 string address;
+                IPAddress parsed;
                 bool known = pins.TryGetValue(host, out address);
-                if (!known || address == HostsPinner.BlackholeAddress)
+                if (!known || address == HostsPinner.BlackholeAddress || !IPAddress.TryParse(address, out parsed))
                 {
                     report.Details.Add(host + ": нет адреса через VPN");
-                    warnings.Add(dnsRefreshRunning || !known ? "Узнаю адреса Claude у DNS VPN…" : host + " недоступен через VPN");
+                    if (pinsSession != session) warnings.Add(AwaitingDns);
+                    else if (string.Equals(host, ClaudeProbe.Host, StringComparison.OrdinalIgnoreCase)) warnings.Add(host + " нет адреса через VPN — у Claude нет сети");
+                    else warnings.Add(host + " нет адреса через VPN — Claude к нему не попадёт");
                     continue;
                 }
-                bool routed = adapters.IsVpnInterface(RouteInspector.BestInterfaceIndex(IPAddress.Parse(address)));
+                bool routed = adapters.IsVpnInterface(RouteInspector.BestInterfaceIndex(parsed));
                 report.Details.Add(host + " → " + address + (routed ? " (через VPN)" : " (мимо VPN)"));
                 if (!routed) warnings.Add(host + " идёт мимо VPN и заблокирован");
             }
@@ -522,12 +612,22 @@ namespace AgentVpnGuard
             {
                 report.Status = GuardStatus.Offline;
                 report.Headline = "VPN подключается…";
+                report.Settling = true;
                 return;
             }
             if (warnings.Count > 0)
             {
                 report.Status = GuardStatus.Warning;
                 report.Headline = warnings[0];
+                report.Settling = warnings[0] == AwaitingDns;
+                return;
+            }
+            string probePin;
+            bool probePinned = pins.TryGetValue(ClaudeProbe.Host, out probePin) && probePin != HostsPinner.BlackholeAddress;
+            if (probeOutcome == null && !probePinned && pinsSession == session && !dnsRefreshRunning)
+            {
+                report.Status = GuardStatus.Warning;
+                report.Headline = ClaudeProbe.Host + " нет адреса через VPN — у Claude нет сети";
                 return;
             }
             if (probeOutcome == null)
@@ -539,6 +639,11 @@ namespace AgentVpnGuard
             }
             report.Status = GuardStatus.Protected;
             report.Headline = "Claude работает только через VPN";
+        }
+
+        private static bool SameList(List<string> first, List<string> second)
+        {
+            return string.Join("|", first) == string.Join("|", second);
         }
 
         private static void Trace(string line)

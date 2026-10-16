@@ -51,9 +51,9 @@ namespace AgentVpnGuard
 
         public static string Download(UpdateRelease release)
         {
-            string folder = DownloadsDirectory();
+            string folder = Path.Combine(DownloadsDirectory(), AppIdentity.Name + "-" + release.VersionText);
             Directory.CreateDirectory(folder);
-            string target = Path.Combine(folder, AppIdentity.Name + "Setup-" + release.VersionText + ".exe");
+            string target = Path.Combine(folder, AppIdentity.Name + "Setup.exe");
             string partial = target + ".part";
             HttpWebRequest request = CreateRequest(release.DownloadUrl, DownloadTimeoutMs);
             using (var response = (HttpWebResponse)request.GetResponse())

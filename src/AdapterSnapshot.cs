@@ -18,12 +18,12 @@ namespace AgentVpnGuard
             get { return Adapters.Find(adapter => adapter.IsVpn && adapter.IsUp && adapter.Addresses.Count > 0); }
         }
 
-        public List<string> BlockedInterfaceNames(bool includeVpn)
+        public List<string> BlockedInterfaceNames(NetworkAdapter verifiedVpn)
         {
             var names = new List<string>();
             foreach (NetworkAdapter adapter in Adapters)
             {
-                if ((adapter.IsVpn && !includeVpn) || !adapter.IsPresent) continue;
+                if (adapter == verifiedVpn || !adapter.IsPresent) continue;
                 if (!names.Exists(name => string.Equals(name, adapter.Name, StringComparison.OrdinalIgnoreCase))) names.Add(adapter.Name);
             }
             names.Sort(StringComparer.OrdinalIgnoreCase);

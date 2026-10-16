@@ -12,10 +12,11 @@ namespace AgentVpnGuard
     {
         private const int CommandTimeoutMs = 15000;
         private const int CancelledByUser = 1223;
+        private const int TaskNotFound = 1;
 
         public static bool IsEnabled()
         {
-            return RunSchtasks("/Query /TN \"" + AppIdentity.Name + "\"", false) == 0;
+            return QueryTask() == 0;
         }
 
         public static string Enable(string executablePath)
@@ -26,16 +27,38 @@ namespace AgentVpnGuard
                 File.WriteAllText(definitionPath, Definition(executablePath), Encoding.Unicode);
                 return Explain(RunSchtasks("/Create /TN \"" + AppIdentity.Name + "\" /XML \"" + definitionPath + "\" /F", !IsElevated()), "включить автозапуск");
             }
+            catch (IOException error)
+            {
+                return "Не удалось включить автозапуск: " + error.Message;
+            }
+            catch (UnauthorizedAccessException error)
+            {
+                return "Не удалось включить автозапуск: " + error.Message;
+            }
             finally
             {
-                File.Delete(definitionPath);
+                try
+                {
+                    File.Delete(definitionPath);
+                }
+                catch (IOException)
+                {
+                }
+                catch (UnauthorizedAccessException)
+                {
+                }
             }
         }
 
         public static string Disable()
         {
-            if (!IsEnabled()) return null;
+            if (QueryTask() == TaskNotFound) return null;
             return Explain(RunSchtasks("/Delete /TN \"" + AppIdentity.Name + "\" /F", !IsElevated()), "выключить автозапуск");
+        }
+
+        private static int QueryTask()
+        {
+            return RunSchtasks("/Query /TN \"" + AppIdentity.Name + "\"", false);
         }
 
         private static string Definition(string executablePath)
@@ -82,7 +105,7 @@ namespace AgentVpnGuard
 
         private static int RunSchtasks(string arguments, bool elevate)
         {
-            var start = new ProcessStartInfo("schtasks.exe", arguments) { WindowStyle = ProcessWindowStyle.Hidden };
+            var start = new ProcessStartInfo(SystemTools.Schtasks, arguments) { WindowStyle = ProcessWindowStyle.Hidden };
             if (elevate)
             {
                 start.UseShellExecute = true;
@@ -97,7 +120,18 @@ namespace AgentVpnGuard
             {
                 using (Process process = Process.Start(start))
                 {
-                    return process.WaitForExit(CommandTimeoutMs) ? process.ExitCode : -1;
+                    if (process.WaitForExit(CommandTimeoutMs)) return process.ExitCode;
+                    try
+                    {
+                        process.Kill();
+                    }
+                    catch (Win32Exception)
+                    {
+                    }
+                    catch (InvalidOperationException)
+                    {
+                    }
+                    return -1;
                 }
             }
             catch (Win32Exception error)

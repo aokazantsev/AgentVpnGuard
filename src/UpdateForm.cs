@@ -63,7 +63,7 @@ namespace AgentVpnGuard
             var openFolder = new Button { Text = "Открыть папку", AutoSize = true };
             openFolder.Click += (sender, e) => ShowInExplorer(downloadedPath);
             var copyPath = new Button { Text = "Скопировать путь", AutoSize = true };
-            copyPath.Click += (sender, e) => Clipboard.SetText(downloadedPath);
+            copyPath.Click += (sender, e) => CopyPath();
             fileButtons.Controls.Add(openFolder);
             fileButtons.Controls.Add(copyPath);
             layout.Controls.Add(fileButtons);
@@ -128,11 +128,23 @@ namespace AgentVpnGuard
             ShowInExplorer(path);
         }
 
+        private void CopyPath()
+        {
+            try
+            {
+                Clipboard.SetText(downloadedPath);
+            }
+            catch (System.Runtime.InteropServices.ExternalException error)
+            {
+                AppLog.Append("clipboard failed: " + error.Message);
+            }
+        }
+
         private static void ShowInExplorer(string path)
         {
             try
             {
-                Process.Start(new ProcessStartInfo("explorer.exe", "/select,\"" + path + "\"") { UseShellExecute = false });
+                Process.Start(new ProcessStartInfo(SystemTools.Explorer, "/select,\"" + path + "\"") { UseShellExecute = false });
             }
             catch (System.ComponentModel.Win32Exception error)
             {

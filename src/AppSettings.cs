@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Threading;
 
 namespace AgentVpnGuard
 {
@@ -16,6 +17,8 @@ namespace AgentVpnGuard
         private const string ProtectionEnabledKey = "protectionEnabled";
         private const char KeyValueSeparator = '=';
         private const char ListSeparator = '|';
+        private const int ReadAttempts = 5;
+        private const int ReadRetryMs = 300;
         private static readonly string[] FirstProxiedDefault = { "challenges.cloudflare.com" };
 
         public static readonly string FilePath = Path.Combine(AppIdentity.DataDirectory, "settings.txt");
@@ -40,6 +43,7 @@ namespace AgentVpnGuard
         public List<string> ExtraExecutables = new List<string>();
         public bool Notifications = true;
         public bool ProtectionEnabled = true;
+        public string ReadError;
 
         public bool HasVpnAdapters
         {
@@ -51,6 +55,20 @@ namespace AgentVpnGuard
             get { return File.Exists(FilePath); }
         }
 
+        public AppSettings Copy()
+        {
+            return new AppSettings
+            {
+                VpnAdapters = new List<string>(VpnAdapters),
+                PinnedHosts = new List<string>(PinnedHosts),
+                CriticalHosts = new List<string>(CriticalHosts),
+                ProxiedHosts = new List<string>(ProxiedHosts),
+                ExtraExecutables = new List<string>(ExtraExecutables),
+                Notifications = Notifications,
+                ProtectionEnabled = ProtectionEnabled
+            };
+        }
+
         public static AppSettings Load()
         {
             return LoadFrom(FilePath);
@@ -60,26 +78,35 @@ namespace AgentVpnGuard
         {
             var settings = new AppSettings();
             if (!File.Exists(path)) return settings;
-            try
+            string[] lines = null;
+            for (int attempt = 1; lines == null; attempt++)
             {
-                foreach (string line in File.ReadAllLines(path, Encoding.UTF8))
+                try
                 {
-                    if (line.TrimStart().StartsWith("#")) continue;
-                    int separator = line.IndexOf(KeyValueSeparator);
-                    if (separator <= 0) continue;
-                    settings.Apply(line.Substring(0, separator).Trim(), line.Substring(separator + 1).Trim());
+                    lines = File.ReadAllLines(path, Encoding.UTF8);
                 }
+                catch (IOException error)
+                {
+                    if (attempt >= ReadAttempts) settings.ReadError = error.Message;
+                }
+                catch (UnauthorizedAccessException error)
+                {
+                    if (attempt >= ReadAttempts) settings.ReadError = error.Message;
+                }
+                if (settings.ReadError != null) return settings;
+                if (lines == null) Thread.Sleep(ReadRetryMs);
             }
-            catch (IOException)
+            foreach (string line in lines)
             {
-            }
-            catch (UnauthorizedAccessException)
-            {
+                if (line.TrimStart().StartsWith("#")) continue;
+                int separator = line.IndexOf(KeyValueSeparator);
+                if (separator <= 0) continue;
+                settings.Apply(line.Substring(0, separator).Trim(), line.Substring(separator + 1).Trim());
             }
             return settings;
         }
 
-        public bool TrySave()
+        public string Save()
         {
             var content = new StringBuilder();
             AppendLine(content, VpnAdaptersKey, Join(VpnAdapters));
@@ -93,15 +120,15 @@ namespace AgentVpnGuard
             {
                 Directory.CreateDirectory(AppIdentity.DataDirectory);
                 File.WriteAllText(FilePath, content.ToString(), new UTF8Encoding(false));
-                return true;
+                return null;
             }
-            catch (IOException)
+            catch (IOException error)
             {
-                return false;
+                return error.Message;
             }
-            catch (UnauthorizedAccessException)
+            catch (UnauthorizedAccessException error)
             {
-                return false;
+                return error.Message;
             }
         }
 

@@ -18,16 +18,16 @@ namespace AgentVpnGuard
         private const int StateEstablished = 5;
         private const int StateDeleteTcb = 12;
 
-        public static ConnectionAudit Audit(Dictionary<int, string> claudeProcesses, AdapterSnapshot adapters, bool closeLeaks)
+        public static ConnectionAudit Audit(Dictionary<int, string> claudeProcesses, AdapterSnapshot adapters)
         {
             var audit = new ConnectionAudit();
             if (claudeProcesses.Count == 0) return audit;
-            AuditIpv4(claudeProcesses, adapters, closeLeaks, audit);
+            AuditIpv4(claudeProcesses, adapters, audit);
             AuditIpv6(claudeProcesses, adapters, audit);
             return audit;
         }
 
-        private static void AuditIpv4(Dictionary<int, string> claudeProcesses, AdapterSnapshot adapters, bool closeLeaks, ConnectionAudit audit)
+        private static void AuditIpv4(Dictionary<int, string> claudeProcesses, AdapterSnapshot adapters, ConnectionAudit audit)
         {
             ReadTable(AddressFamilyInet, Row4Size, row =>
             {
@@ -39,7 +39,7 @@ namespace AgentVpnGuard
                 var remote = new IPAddress((uint)Marshal.ReadInt32(row, 12));
                 if (IPAddress.IsLoopback(remote) || adapters.IsVpnAddress(local)) return;
                 audit.Leaks.Add(Path.GetFileName(path) + " → " + remote + ":" + Port(Marshal.ReadInt32(row, 16)));
-                if (closeLeaks && Close(row)) audit.Closed++;
+                if (Close(row)) audit.Closed++;
             });
         }
 

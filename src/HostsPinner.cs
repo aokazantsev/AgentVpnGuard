@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Net;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -15,7 +16,7 @@ namespace AgentVpnGuard
         private const string EndMarker = "# " + AppIdentity.Name + " end";
         private const string LegacyBeginMarker = "# " + AppIdentity.LegacyName + " begin";
         private const string LegacyEndMarker = "# " + AppIdentity.LegacyName + " end";
-        private const int WriteAttempts = 5;
+        private const int WriteAttempts = 2;
         private const int WriteRetryMs = 200;
 
         public static readonly string HostsPath = Path.Combine(Environment.SystemDirectory, @"drivers\etc\hosts");
@@ -32,7 +33,8 @@ namespace AgentVpnGuard
                 else if (inside && trimmed.Length > 0 && !trimmed.StartsWith("#"))
                 {
                     string[] parts = trimmed.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
-                    if (parts.Length >= 2) pins[parts[1]] = parts[0];
+                    IPAddress address;
+                    if (parts.Length >= 2 && IPAddress.TryParse(parts[0], out address)) pins[parts[1]] = parts[0];
                 }
             }
             return pins;
@@ -50,29 +52,41 @@ namespace AgentVpnGuard
             return block;
         }
 
-        public static bool Apply(IList<string> hosts, IDictionary<string, string> pins)
+        public static bool Apply(Dictionary<string, string> block)
         {
-            var block = new List<string> { BeginMarker };
-            foreach (string host in hosts)
-            {
-                string address;
-                if (!pins.TryGetValue(host, out address)) address = BlackholeAddress;
-                block.Add(address + " " + host);
-            }
-            block.Add(EndMarker);
-            return Rewrite(block);
+            var lines = new List<string> { BeginMarker };
+            foreach (KeyValuePair<string, string> pin in block) lines.Add(pin.Value + " " + pin.Key);
+            lines.Add(EndMarker);
+            return Rewrite(lines);
         }
 
-        public static bool Remove()
+        public static void Remove()
         {
-            return Rewrite(new List<string>());
+            Rewrite(new List<string>());
         }
 
         private static bool Rewrite(List<string> block)
         {
+            for (int attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    return RewriteOnce(block);
+                }
+                catch (IOException)
+                {
+                    if (attempt >= WriteAttempts) throw;
+                }
+                Thread.Sleep(WriteRetryMs);
+            }
+        }
+
+        private static bool RewriteOnce(List<string> block)
+        {
             byte[] original = File.Exists(HostsPath) ? File.ReadAllBytes(HostsPath) : new byte[0];
             bool hasBom = original.Length >= 3 && original[0] == 0xEF && original[1] == 0xBB && original[2] == 0xBF;
-            string text = new UTF8Encoding(false).GetString(original, hasBom ? 3 : 0, original.Length - (hasBom ? 3 : 0));
+            Encoding encoding = DetectEncoding(original, hasBom);
+            string text = encoding.GetString(original, hasBom ? 3 : 0, original.Length - (hasBom ? 3 : 0));
 
             var kept = new List<string>();
             bool inside = false;
@@ -94,21 +108,9 @@ namespace AgentVpnGuard
             string updated = result.ToString();
             if (updated == text) return false;
 
-            byte[] body = new UTF8Encoding(false).GetBytes(updated);
+            byte[] body = encoding.GetBytes(updated);
             byte[] bytes = hasBom ? Concat(new byte[] { 0xEF, 0xBB, 0xBF }, body) : body;
-            for (int attempt = 1; ; attempt++)
-            {
-                try
-                {
-                    File.WriteAllBytes(HostsPath, bytes);
-                    break;
-                }
-                catch (IOException)
-                {
-                    if (attempt >= WriteAttempts) throw;
-                }
-                Thread.Sleep(WriteRetryMs);
-            }
+            File.WriteAllBytes(HostsPath, bytes);
             DnsFlushResolverCache();
             return true;
         }
@@ -116,7 +118,23 @@ namespace AgentVpnGuard
         private static IEnumerable<string> ReadLines()
         {
             if (!File.Exists(HostsPath)) return new string[0];
-            return SplitLines(File.ReadAllText(HostsPath, Encoding.UTF8));
+            byte[] original = File.ReadAllBytes(HostsPath);
+            bool hasBom = original.Length >= 3 && original[0] == 0xEF && original[1] == 0xBB && original[2] == 0xBF;
+            return SplitLines(DetectEncoding(original, hasBom).GetString(original, hasBom ? 3 : 0, original.Length - (hasBom ? 3 : 0)));
+        }
+
+        private static Encoding DetectEncoding(byte[] bytes, bool hasBom)
+        {
+            if (hasBom) return new UTF8Encoding(false);
+            try
+            {
+                new UTF8Encoding(false, true).GetString(bytes);
+                return new UTF8Encoding(false);
+            }
+            catch (DecoderFallbackException)
+            {
+                return Encoding.Default;
+            }
         }
 
         private static string[] SplitLines(string text)

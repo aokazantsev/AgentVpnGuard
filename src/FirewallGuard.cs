@@ -13,6 +13,8 @@ namespace AgentVpnGuard
         private const int ProfilesAll = 0x7FFFFFFF;
         private const int ModifyStateGroupPolicyOverride = 1;
         private const int RemovePasses = 3;
+        private const string AnyAddress = "*";
+        private const string AllInterfaceTypes = "All";
 
         public static string RuleName(string executable)
         {
@@ -42,29 +44,15 @@ namespace AgentVpnGuard
                 AppLog.Trace("fw: " + (isNew ? "adding" : "repairing") + " rule for " + executable + ", interfaces " + interfaces.Count);
                 try
                 {
-                    if (isNew)
-                    {
-                        AppLog.Trace("fw: creating rule object");
-                        rule = Activator.CreateInstance(Type.GetTypeFromProgID("HNetCfg.FWRule", true));
-                        rule.Name = name;
-                    }
-                    AppLog.Trace("fw: description");
-                    rule.Description = "Claude выходит в сеть только через VPN. Создано " + AppIdentity.Name + ", не править вручную.";
-                    AppLog.Trace("fw: application");
-                    rule.ApplicationName = executable;
-                    AppLog.Trace("fw: protocol, direction, action");
-                    rule.Protocol = ProtocolAny;
-                    rule.Direction = DirectionOut;
-                    rule.Action = ActionBlock;
-                    AppLog.Trace("fw: profiles");
-                    rule.Profiles = ProfilesAll;
-                    AppLog.Trace("fw: grouping");
-                    rule.Grouping = AppIdentity.FirewallGroup;
+                    if (isNew) rule = NewRule(name);
+                    Configure(rule, executable);
                     AppLog.Trace("fw: interfaces " + string.Join(" | ", interfaces));
-                    if (!TrySetInterfaces(rule, interfaces))
+                    bool interfacesSet = TrySetInterfaces(rule, interfaces);
+                    if (!interfacesSet)
                     {
                         result.Errors.Add("Windows не принял список адаптеров для " + executable);
-                        continue;
+                        AppLog.Trace("fw: blocking all adapters for " + executable);
+                        TrySetInterfaces(rule, new List<string>());
                     }
                     AppLog.Trace("fw: enabling");
                     rule.Enabled = true;
@@ -74,7 +62,7 @@ namespace AgentVpnGuard
                         rules.Add(rule);
                         result.Added++;
                     }
-                    else
+                    else if (interfacesSet)
                     {
                         result.Repaired++;
                     }
@@ -111,7 +99,6 @@ namespace AgentVpnGuard
         public static FirewallSyncResult Verify(FirewallRequest request)
         {
             var result = new FirewallSyncResult();
-            result.AppliedInterfaces.AddRange(request.AppliedInterfaces);
             dynamic rules = OpenPolicy().Rules;
             foreach (string executable in request.Executables)
             {
@@ -175,6 +162,33 @@ namespace AgentVpnGuard
             return result;
         }
 
+        private static dynamic NewRule(string name)
+        {
+            AppLog.Trace("fw: creating rule object");
+            dynamic rule = Activator.CreateInstance(Type.GetTypeFromProgID("HNetCfg.FWRule", true));
+            rule.Name = name;
+            return rule;
+        }
+
+        private static void Configure(dynamic rule, string executable)
+        {
+            AppLog.Trace("fw: description");
+            rule.Description = "Claude выходит в сеть только через VPN. Создано " + AppIdentity.Name + ", не править вручную.";
+            AppLog.Trace("fw: application");
+            rule.ApplicationName = executable;
+            AppLog.Trace("fw: protocol, direction, action");
+            rule.Protocol = ProtocolAny;
+            rule.RemoteAddresses = AnyAddress;
+            rule.LocalAddresses = AnyAddress;
+            rule.InterfaceTypes = AllInterfaceTypes;
+            rule.Direction = DirectionOut;
+            rule.Action = ActionBlock;
+            AppLog.Trace("fw: profiles");
+            rule.Profiles = ProfilesAll;
+            AppLog.Trace("fw: grouping");
+            rule.Grouping = AppIdentity.FirewallGroup;
+        }
+
         private static dynamic OpenPolicy()
         {
             return Activator.CreateInstance(Type.GetTypeFromProgID("HNetCfg.FwPolicy2", true));
@@ -197,7 +211,13 @@ namespace AgentVpnGuard
             try
             {
                 string application = rule.ApplicationName;
+                string remoteAddresses = rule.RemoteAddresses;
+                string localAddresses = rule.LocalAddresses;
+                string interfaceTypes = rule.InterfaceTypes;
                 return (bool)rule.Enabled
+                    && remoteAddresses == AnyAddress
+                    && localAddresses == AnyAddress
+                    && interfaceTypes == AllInterfaceTypes
                     && (int)rule.Action == ActionBlock
                     && (int)rule.Direction == DirectionOut
                     && (int)rule.Protocol == ProtocolAny

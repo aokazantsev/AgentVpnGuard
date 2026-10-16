@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -19,6 +18,7 @@ namespace AgentVpnGuard
         {
             if (openForm != null)
             {
+                if (openForm.WindowState == FormWindowState.Minimized) openForm.WindowState = FormWindowState.Normal;
                 openForm.Activate();
                 return;
             }
@@ -33,11 +33,12 @@ namespace AgentVpnGuard
             StartPosition = FormStartPosition.CenterScreen;
             AutoScaleMode = AutoScaleMode.Dpi;
             Font = SystemFonts.MessageBoxFont;
-            ClientSize = new Size(720, 460);
-            MinimumSize = new Size(480, 300);
+            ClientSize = new Size(Font.Height * 48, Font.Height * 30);
+            MinimumSize = new Size(Font.Height * 32, Font.Height * 20);
             Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
 
             var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(12), ColumnCount = 1, RowCount = 3 };
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -47,6 +48,7 @@ namespace AgentVpnGuard
             {
                 Text = "Что программа сообщала: смена состояния и изменения защиты. Новые записи сверху.",
                 AutoSize = true,
+                Dock = DockStyle.Fill,
                 Margin = new Padding(0, 0, 0, 8)
             });
 
@@ -56,7 +58,7 @@ namespace AgentVpnGuard
             empty.Text = "Пока ничего не происходило.";
             empty.ForeColor = SystemColors.GrayText;
             empty.AutoSize = true;
-            empty.Location = new Point(8, 8);
+            empty.Location = new Point(8, Font.Height * 2 + 12);
             host.Controls.Add(empty);
             empty.BringToFront();
             layout.Controls.Add(host);
@@ -82,7 +84,15 @@ namespace AgentVpnGuard
         public static void OpenTechnicalLog()
         {
             if (!File.Exists(AppLog.FilePath)) AppLog.Append("log opened");
-            Process.Start(new ProcessStartInfo("notepad.exe", "\"" + AppLog.FilePath + "\"") { UseShellExecute = false });
+            try
+            {
+                Process.Start(new ProcessStartInfo(SystemTools.Notepad, "\"" + AppLog.FilePath + "\"") { UseShellExecute = false });
+            }
+            catch (System.ComponentModel.Win32Exception error)
+            {
+                AppLog.Append("notepad failed: " + error.Message);
+                MessageBox.Show("Не удалось открыть " + AppLog.FilePath + ": " + error.Message, AppIdentity.Name, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
         }
 
         private void ConfigureGrid()
@@ -105,7 +115,7 @@ namespace AgentVpnGuard
             grid.DefaultCellStyle.SelectionBackColor = SystemColors.ControlLight;
             grid.DefaultCellStyle.SelectionForeColor = SystemColors.ControlText;
 
-            var icon = new DataGridViewImageColumn { HeaderText = "", Width = 28, ImageLayout = DataGridViewImageCellLayout.Normal };
+            var icon = new DataGridViewImageColumn { HeaderText = "", Width = SystemInformation.SmallIconSize.Width + 12, ImageLayout = DataGridViewImageCellLayout.Normal };
             icon.DefaultCellStyle.Alignment = DataGridViewContentAlignment.TopCenter;
             var time = new DataGridViewTextBoxColumn { HeaderText = "Время", AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells };
             time.DefaultCellStyle.WrapMode = DataGridViewTriState.False;

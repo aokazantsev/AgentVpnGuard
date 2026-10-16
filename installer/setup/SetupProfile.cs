@@ -14,6 +14,8 @@ namespace AgentVpnGuard
         private const string VpnAdapterKey = "vpnAdapter";
         private const string ResetSettingsKey = "resetSettings";
 
+        private static string fieldsReadError;
+
         public const string Intro =
             "Claude (десктоп, Claude Code, расширения редакторов) сможет выходить в сеть только через VPN. "
             + "Выключен VPN — у Claude нет сети вообще. Программа живёт в трее и сама берёт под защиту новые версии Claude.";
@@ -33,8 +35,8 @@ namespace AgentVpnGuard
 
         public static List<SetupField> Fields()
         {
-            LegacyInstall.CopyData();
-            AppSettings current = AppSettings.Load();
+            AppSettings current = LoadCurrent();
+            fieldsReadError = current.ReadError;
             var adapter = new SetupField
             {
                 Key = VpnAdapterKey,
@@ -58,8 +60,9 @@ namespace AgentVpnGuard
                 {
                     Key = ResetSettingsKey,
                     Text = "Сбросить настройки",
-                    Hint = "Закрепляемые адреса Claude, дополнительные программы под защитой и уведомления вернутся к стандартным. "
-                        + "Адаптер VPN берётся из поля выше. Журнал не трогается. Помогает, если сбой вызван настройками.",
+                    Hint = "Списки имён (закрепляемые, без которых Claude не работает, через прокси VPN), дополнительные программы под защитой "
+                        + "и уведомления вернутся к стандартным, выключенная защита включится. "
+                        + "Адаптер VPN берётся из поля выше (если настройки не прочитались при открытии окна и поле не менялось — сохранённый). Журнал не трогается. Помогает, если сбой вызван настройками.",
                     Checked = false
                 },
                 new SetupOption
@@ -73,26 +76,32 @@ namespace AgentVpnGuard
                         + "без повторных попыток:\n"
                         + "• версия программы, Windows и .NET;\n"
                         + "• текст ошибки;\n"
-                        + "• последние 100 КБ журнала C:\\ProgramData\\AgentVpnGuard\\log.txt: имя пользователя и компьютера Windows, "
+                        + "• последние 100 КБ журнала " + Path.Combine(AppIdentity.DataDirectory, "log.txt") + ": имя пользователя и компьютера Windows, "
                         + "пути к программам Claude, названия сетевых адаптеров, адреса DNS-серверов VPN и адреса Claude внутри VPN;\n"
                         + "• IP-адрес, с которого пришёл отчёт.\n"
                         + "Отчёты видит только автор, хранятся последние 50 МБ. Изменить выбор — переустановить программу.",
-                    Checked = CrashReportConsent.IsGiven
+                    Checked = File.Exists(AppSettings.FilePath) ? CrashReportConsent.IsGiven : LegacyInstall.ConsentGiven
                 }
             };
         }
 
         public static void BeforeExtract(InstallRequest request, Action<int, string> report, List<string> notes)
         {
-            report(3, "Убираю прежнюю версию " + AppIdentity.LegacyName + "…");
-            LegacyInstall.Remove(request.TargetDirectory, notes);
-            report(5, "Папка настроек…");
+            report(2, "Останавливаю прежнюю версию " + AppIdentity.LegacyName + "…");
+            LegacyInstall.StopAndCopyData(notes);
+            report(4, "Папка настроек…");
             PrepareDataDirectory();
             bool reset = request.Has(ResetSettingsKey);
             SetupLog.Append("reset settings: " + reset);
-            AppSettings settings = reset ? new AppSettings() : AppSettings.Load();
-            settings.VpnAdapters = AppSettings.ParseList(request.Value(VpnAdapterKey));
-            if (!settings.TrySave()) throw new InvalidOperationException("Не удалось записать настройки в " + AppSettings.FilePath + ".");
+            AppSettings settings = reset ? new AppSettings() : LoadCurrent();
+            if (settings.ReadError != null) throw new InvalidOperationException("Не удалось прочитать настройки: " + settings.ReadError + ". Прежняя версия остановлена, защита действует как была. Повтори установку, когда файл освободится.");
+            bool fieldGuessed = fieldsReadError != null && request.Value(VpnAdapterKey) == DefaultVpnAdapter;
+            SetupLog.Append("settings read at open: " + (fieldsReadError ?? "ok") + ", adapter field guessed: " + fieldGuessed);
+            AppSettings saved = reset ? LoadCurrent() : settings;
+            bool keepSaved = fieldGuessed && saved.ReadError == null && saved.HasVpnAdapters;
+            settings.VpnAdapters = keepSaved ? new List<string>(saved.VpnAdapters) : AppSettings.ParseList(request.Value(VpnAdapterKey));
+            string saveProblem = settings.Save();
+            if (saveProblem != null) throw new InvalidOperationException("Не удалось записать настройки в " + AppSettings.FilePath + ": " + saveProblem);
             CrashReportConsent.Set(request.Has(CrashReportConsent.OptionKey));
             SetupLog.Append("crash reports: " + request.Has(CrashReportConsent.OptionKey));
             if (!settings.HasVpnAdapters) notes.Add("Адаптер VPN не указан — у Claude не будет сети, пока не выберешь его в настройках программы.");
@@ -103,11 +112,23 @@ namespace AgentVpnGuard
 
         public static void AfterExtract(InstallRequest request, Action<int, string> report, List<string> notes)
         {
+            LegacyInstall.DisableAutostart(notes);
+        }
+
+        public static void AfterLaunch(InstallRequest request, Action<int, string> report, List<string> notes)
+        {
+            report(98, "Убираю прежнюю версию " + AppIdentity.LegacyName + "…");
+            LegacyInstall.Remove(notes);
         }
 
         public static void Launch(string executable)
         {
             Process.Start(new ProcessStartInfo(executable) { WorkingDirectory = Path.GetDirectoryName(executable), UseShellExecute = false });
+        }
+
+        private static AppSettings LoadCurrent()
+        {
+            return File.Exists(AppSettings.FilePath) ? AppSettings.Load() : AppSettings.LoadFrom(LegacyInstall.SettingsPath);
         }
 
         private static void PrepareDataDirectory()

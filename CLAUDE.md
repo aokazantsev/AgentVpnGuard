@@ -35,8 +35,20 @@
 
 - Комментариев нет, один класс — один файл, `if/else` вместо `switch` на две ветки.
 - Таймеры не чаще раза в 5 с; DNS и проверка узла — в пуле потоков, результат через `Post`.
-- Ничего корпоративного в коде и README: по умолчанию `Fortinet` и `example.com`, свой узел компании
-  пользователь вписывает в установщике.
+- Ничего корпоративного в коде и README: адаптер VPN по умолчанию — `Fortinet`.
+- Системные программы (`schtasks`, `powershell`, `cmd`) — по полному пути из `SystemTools`: установщик запускается из
+  «Загрузок», и программа с тем же именем рядом с ним выполнилась бы с правами администратора.
+- Безопасность — соразмерно утилите (модель угроз — в скилле `selfcheck`, режим pet-проекта): защищаемся от того, до
+  чего программа дотягивается сама (сеть, файлы рядом с установщиком в «Загрузках», канал обновления) и от вреда от
+  самой программы (стёртое чужое, испорченные конфиги). Локальный процесс того же пользователя — вне модели.
+- Из папки установки и прежних папок программа удаляет только свои файлы — имена из `AppIdentity.PayloadFiles`
+  (= `installer\payload.txt`), метку `AgentVpnGuard.install` и `.old.exe`, — а саму папку только если она опустела
+  (`InstallFolder.RemoveProgramFiles`): чужое в ней пропасть не должно. Установщик принимает папку, если она пустая, с
+  меткой (`InstallFolder.IsMarked`), с одними файлами программы (`HoldsOnlyProgramFiles`) или это зарегистрированная
+  папка с exe (`IsOurs`). Прежняя зарегистрированная
+  папка чистится при `IsOurs`; деинсталлятор чистит папку только с меткой; папка ClaudeVpnGuard чистится, только если
+  в ней нет метки AgentVpnGuard.
+- `src\app.ico` генерируется скриптом `src\make_icon.py` (нужен Pillow).
 
 ## Грабли
 
@@ -58,13 +70,16 @@
 Проект — один из четырёх pet-проектов (AgentVpnGuard, DevMonitor, AgentGlow, AgentProxy), они устроены одинаково:
 похожий интерфейс, одинаковые установщик, деинсталлятор, порядок меню и код общих частей.
 
-- **Общие файлы** — одинаковые во всех трёх, отличается только `namespace`:
+- **Общие файлы** — одинаковые в AgentVpnGuard, DevMonitor и AgentGlow, отличается только `namespace`:
   `installer\setup\{SetupForm, Installation, InstallTarget, Payload, SetupOption, SetupField,
-  InstallRequest, SetupProgram, SetupLog}.cs`, `installer\common\{UninstallRegistration, RunningApp}.cs`,
-  `installer\uninstall\UninstallProgram.cs`, `src\{AboutForm, CrashReportConsent, CrashUploader}.cs`.
-  `installer\make-payload.ps1` отличается только переменными в начале; `build.cmd` и `build-installer.cmd` — тоже,
-  кроме AgentGlow, у которого они свои (рекурсивная сборка `src`, общий список исходников для установщика). Поменял
-  общий файл — та же правка в двух других проектах.
+  InstallRequest, SetupProgram, SetupLog}.cs`, `installer\common\{UninstallRegistration, RunningApp, InstallFolder}.cs`,
+  `installer\uninstall\UninstallProgram.cs`, `src\{AboutForm, CrashReportConsent, CrashUploader, UpdateChecker,
+  UpdateForm, UpdateRelease, SystemTools}.cs`. `installer\make-payload.ps1` отличается только переменными в начале;
+  `build.cmd` и `build-installer.cmd` — тоже, кроме AgentGlow, у которого они свои (рекурсивная сборка `src`, общий
+  список исходников для установщика). Поменял общий файл — та же правка в остальных проектах. У AgentProxy часть
+  общих файлов расходится осознанно (установка без прав, HKCU, тихий режим) — список в его `CLAUDE.md`. Правки общих
+  файлов AgentVpnGuard 3.2 (`SystemTools`, `InstallFolder`, `SetupProfile.AfterLaunch`) в DevMonitor и AgentGlow
+  переносятся их тредами цикла техобновлений — список в `ai-memory\dev-tools\pet-projects.md`.
 - **Своё у проекта:** `src\AppIdentity.cs` (имя, версия, ссылки, пути), `src\Autostart.cs` (задача
   Планировщика или ключ Run), `installer\setup\SetupProfile.cs` (тексты, поля, галочки, свои шаги),
   `installer\uninstall\UninstallProfile.cs`, `installer\payload.txt` (что ставится), `src\CrashReport.cs`
@@ -82,7 +97,7 @@
     (метки ошибки и починки), в подсказке, меню и журнале. Свои проблемы — только в трее и
     уведомлениях, не в основном результате программы.
 - **Меню трея:** блок состояния; действия приложения; «Настройки…», «Журнал» (если есть),
-  «Запускать при входе в Windows», «О приложении…»; «Выход».
+  «Запускать при входе в Windows», «Проверить обновление…», «О приложении…»; «Выход».
 - **Установщик:** права администратора, выбор папки (по умолчанию `C:\Program Files\<Имя>`), галочка
   автозапуска, сам останавливает запущенную копию, после установки запускает программу. Регистрация
   в «Приложениях» — в HKLM. Деинсталлятор сам закрывает программу и удаляет её данные.

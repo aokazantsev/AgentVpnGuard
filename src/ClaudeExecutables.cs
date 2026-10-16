@@ -30,7 +30,7 @@ namespace AgentVpnGuard
             AddPackagedApps(found);
             foreach (string extra in settings.ExtraExecutables)
             {
-                AddFile(found, Environment.ExpandEnvironmentVariables(extra));
+                AddFile(found, Environment.ExpandEnvironmentVariables(extra.Trim('"').Trim()));
             }
             return found;
         }
@@ -81,16 +81,21 @@ namespace AgentVpnGuard
         private static void AddVersioned(SortedSet<string> found, string root, string fileName)
         {
             if (!Directory.Exists(root)) return;
+            string[] subdirectories;
             try
             {
-                foreach (string file in Directory.GetFiles(root, fileName, SearchOption.AllDirectories)) found.Add(file);
+                foreach (string file in Directory.GetFiles(root, fileName)) found.Add(file);
+                subdirectories = Directory.GetDirectories(root);
             }
             catch (IOException)
             {
+                return;
             }
             catch (UnauthorizedAccessException)
             {
+                return;
             }
+            foreach (string subdirectory in subdirectories) AddVersioned(found, subdirectory, fileName);
         }
 
         private static void AddFiles(SortedSet<string> found, string directory, string pattern)

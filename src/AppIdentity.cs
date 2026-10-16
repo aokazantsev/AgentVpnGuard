@@ -7,7 +7,7 @@ namespace AgentVpnGuard
     {
         public const string Name = "AgentVpnGuard";
         public const string LegacyName = "ClaudeVpnGuard";
-        public const string Version = "3.1";
+        public const string Version = "3.2";
         public const string ExecutableName = "AgentVpnGuard.exe";
         public const string ProcessName = "AgentVpnGuard";
         public const string UninstallerName = "Uninstall.exe";
@@ -16,6 +16,7 @@ namespace AgentVpnGuard
         public const string GitHubUrl = "https://github.com/aokazantsev/AgentVpnGuard";
         public const string SiteUrl = "https://aokazantsev.ru/pets/agentvpnguard/";
         public const string AutostartDelay = "PT0S";
+        public static readonly string[] PayloadFiles = { ExecutableName, ExecutableName + ".config", UninstallerName, "README.md", "LICENSE", "CHANGELOG.md" };
 
         public static string DataDirectory
         {

@@ -4,4 +4,3 @@ AgentVpnGuard.exe.config
 Uninstall.exe
 installer/obj/
 dist/
-*.preset.txt
