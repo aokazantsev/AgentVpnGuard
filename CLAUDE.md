@@ -78,12 +78,12 @@
   `build.cmd` и `build-installer.cmd` — тоже, кроме AgentGlow, у которого они свои (рекурсивная сборка `src`, общий
   список исходников для установщика). Поменял общий файл — та же правка в остальных проектах. У AgentProxy часть
   общих файлов расходится осознанно (установка без прав, HKCU, тихий режим) — список в его `CLAUDE.md`;
-  `Update{Checker,Form,Release}.cs` у AgentVpnGuard, AgentGlow и AgentProxy одинаковые (сверка sha256 по `digest`
-  релиза, «Установить сейчас» через ShellExecute — окно UAC у программ без прав), своё — `AppIdentity.UpdateSetupArguments`
-  и `UpdateKeeps`. AgentGlow 3.0 перенёс правки общих файлов AgentVpnGuard 3.2–3.3; в DevMonitor их переносит его тред
-  цикла техобновлений — список в `ai-memory\dev-tools\pet-projects.md`.
-- **Своё у проекта:** `src\AppIdentity.cs` (имя, версия, ссылки, пути), `src\Autostart.cs` (задача
-  Планировщика или ключ Run), `installer\setup\SetupProfile.cs` (тексты, поля, галочки, свои шаги),
+  `Update{Checker,Form,Release}.cs` одинаковые у всех четырёх (сверка sha256 по `digest` релиза, «Установить сейчас»
+  через ShellExecute — окно UAC у программ без прав), своё — `AppIdentity.UpdateSetupArguments` и `UpdateKeeps`. Тесты
+  общего кода обновления — в AgentProxy (`tests\csharp\run.cmd`).
+- **Своё у проекта:** `src\AppIdentity.cs` (имя, версия, ссылки, пути, `PayloadFiles`, параметры обновления),
+  `src\Autostart.cs` (задача Планировщика или ключ Run), `installer\setup\SetupProfile.cs` (тексты, поля, галочки,
+  свои шаги, `AfterLaunch`),
   `installer\uninstall\UninstallProfile.cs`, `installer\payload.txt` (что ставится), `src\CrashReport.cs`
   (перехват падений: куда пишет текст ошибки — у каждого свой журнал).
 - **Надёжность:**
