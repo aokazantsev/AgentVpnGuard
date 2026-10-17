@@ -72,11 +72,11 @@ namespace AgentVpnGuard
             }
             catch (IOException error)
             {
-                notes.Add("Прежняя папка программы " + previous + " удалена не полностью (" + error.Message + ") — удали из неё вручную оставшиеся файлы " + AppIdentity.Name + ", а не запуском Uninstall.exe в ней: он снимет защиту.");
+                notes.Add("Прежняя папка программы " + previous + " удалена не полностью (" + error.Message + ") — удали из неё вручную оставшиеся файлы " + AppIdentity.Name + ", а не запуском Uninstall.exe в ней: он удалит и новую установку.");
             }
             catch (UnauthorizedAccessException error)
             {
-                notes.Add("Прежняя папка программы " + previous + " удалена не полностью (" + error.Message + ") — удали из неё вручную оставшиеся файлы " + AppIdentity.Name + ", а не запуском Uninstall.exe в ней: он снимет защиту.");
+                notes.Add("Прежняя папка программы " + previous + " удалена не полностью (" + error.Message + ") — удали из неё вручную оставшиеся файлы " + AppIdentity.Name + ", а не запуском Uninstall.exe в ней: он удалит и новую установку.");
             }
         }
     }
