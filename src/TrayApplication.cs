@@ -28,6 +28,7 @@ namespace AgentVpnGuard
         private GuardStatus? settledStatus;
         private string settledCause;
         private readonly List<string> pendingEvents = new List<string>();
+        private bool updateBalloonShown;
 
         public TrayApplication(AppSettings settings)
         {
@@ -40,7 +41,12 @@ namespace AgentVpnGuard
 
             trayIcon.ContextMenuStrip = new ContextMenuStrip();
             trayIcon.ContextMenuStrip.Opening += OnMenuOpening;
-            trayIcon.MouseDoubleClick += (sender, e) => ShowSettings();
+            trayIcon.MouseDoubleClick += (sender, e) =>
+            {
+                Usage.Hit("tray.double_click");
+                ShowSettings();
+            };
+            trayIcon.BalloonTipClicked += OnBalloonClicked;
             trayIcon.Icon = StatusIconPainter.Paint(GuardStatus.Offline);
             trayIcon.Text = AppIdentity.Name + ": проверяю…";
             trayIcon.Visible = true;
@@ -61,6 +67,9 @@ namespace AgentVpnGuard
             AppLog.Append("watchers: " + watchers.Count);
             Refresh();
             AppLog.Append("first refresh done");
+            UpdateUsageState();
+            Usage.Start();
+            UpdateWatcher.Start(version => Post(() => ShowUpdateBalloon(version)));
             if (!settings.HasVpnAdapters) ShowSettings();
         }
 
@@ -157,6 +166,8 @@ namespace AgentVpnGuard
             if (previousHeadline != report.Headline) AppLog.Append("status " + report.Status + ": " + report.Headline);
 
             trayIcon.Icon = StatusIconPainter.Paint(report.Status);
+            Usage.SetState("status", report.Status);
+            Usage.SetState("protected_programs", report.Executables.Count);
             string tip = AppIdentity.Name + ": " + report.Headline;
             trayIcon.Text = tip.Length > MaxTrayTextLength ? tip.Substring(0, MaxTrayTextLength - 1) + "…" : tip;
 
@@ -177,13 +188,44 @@ namespace AgentVpnGuard
                 {
                     var lines = new List<string> { report.Headline };
                     lines.AddRange(events);
-                    trayIcon.ShowBalloonTip(BalloonMs, AppIdentity.Name, BalloonText(lines), BalloonIcon(report.Status));
+                    ShowBalloon(BalloonText(lines), BalloonIcon(report.Status));
                 }
             }
             else if (events.Count > 0 && settings.Notifications)
             {
-                trayIcon.ShowBalloonTip(BalloonMs, AppIdentity.Name, BalloonText(events), ToolTipIcon.Info);
+                ShowBalloon(BalloonText(events), ToolTipIcon.Info);
             }
+        }
+
+        private void ShowBalloon(string text, ToolTipIcon icon)
+        {
+            updateBalloonShown = false;
+            trayIcon.ShowBalloonTip(BalloonMs, AppIdentity.Name, text, icon);
+        }
+
+        private void ShowUpdateBalloon(string version)
+        {
+            trayIcon.ShowBalloonTip(BalloonMs, AppIdentity.Name, "Вышла версия " + version + ". Нажми, чтобы скачать и установить.", ToolTipIcon.Info);
+            updateBalloonShown = true;
+        }
+
+        private void OnBalloonClicked(object sender, EventArgs e)
+        {
+            if (!updateBalloonShown) return;
+            updateBalloonShown = false;
+            Usage.Hit("update.notify_open");
+            UpdateForm.ShowSingle();
+        }
+
+        private void UpdateUsageState()
+        {
+            Usage.SetState("autostart", Autostart.IsEnabled());
+            Usage.SetState("auto_update", AutoUpdateCheck.IsEnabled);
+            Usage.SetState("crash_reports", CrashReportConsent.IsGiven);
+            Usage.SetState("protection", settings.ProtectionEnabled);
+            Usage.SetState("notifications", settings.Notifications);
+            Usage.SetState("vpn_adapters", settings.VpnAdapters.Count);
+            Usage.SetState("extra_programs", settings.ExtraExecutables.Count);
         }
 
         private static string Cause(string headline)
@@ -225,7 +267,7 @@ namespace AgentVpnGuard
                 settingsForm.Activate();
                 return;
             }
-            settingsForm = new SettingsForm(settings, () => settings, ApplySettings);
+            settingsForm = new SettingsForm(settings, () => settings, ApplySettings, UpdateUsageState);
             settingsForm.FormClosed += (sender, e) => settingsForm = null;
             settingsForm.Show();
         }
@@ -242,6 +284,7 @@ namespace AgentVpnGuard
             }
             settings = updated;
             engine.Reconfigure(updated);
+            UpdateUsageState();
             AppLog.Append("settings saved: vpn=" + string.Join("|", updated.VpnAdapters) + ", protection=" + updated.ProtectionEnabled);
             forceFullSync = true;
             Refresh();
@@ -252,6 +295,7 @@ namespace AgentVpnGuard
         {
             string problem = enable ? Autostart.Enable(Application.ExecutablePath) : Autostart.Disable();
             AppLog.Append("autostart " + (enable ? "enable" : "disable") + ": " + (problem ?? "ok"));
+            Usage.SetState("autostart", Autostart.IsEnabled());
             if (problem != null) MessageBox.Show(problem, AppIdentity.Name, MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
 

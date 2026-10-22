@@ -26,18 +26,50 @@ namespace AgentVpnGuard
                 menu.Items.Add(programs);
             }
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("Проверить сейчас", null, (s, a) => checkNow());
-            menu.Items.Add(protectionEnabled ? "Выключить защиту…" : "Включить защиту", null, (s, a) => toggleProtection(!protectionEnabled));
+            menu.Items.Add("Проверить сейчас", null, (s, a) =>
+            {
+                Usage.Hit("menu.check_now");
+                checkNow();
+            });
+            menu.Items.Add(protectionEnabled ? "Выключить защиту…" : "Включить защиту", null, (s, a) =>
+            {
+                Usage.Hit(protectionEnabled ? "menu.protection_off" : "menu.protection_on");
+                toggleProtection(!protectionEnabled);
+            });
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("Настройки…", null, (s, a) => showSettings());
-            menu.Items.Add("Журнал", null, (s, a) => openLog());
+            menu.Items.Add("Настройки…", null, (s, a) =>
+            {
+                Usage.Hit("menu.settings");
+                showSettings();
+            });
+            menu.Items.Add("Журнал", null, (s, a) =>
+            {
+                Usage.Hit("menu.journal");
+                openLog();
+            });
             var startup = new ToolStripMenuItem("Запускать при входе в Windows") { Checked = startupEnabled };
-            startup.Click += (s, a) => toggleStartup(!startup.Checked);
+            startup.Click += (s, a) =>
+            {
+                Usage.Hit(startup.Checked ? "menu.autostart_off" : "menu.autostart_on");
+                toggleStartup(!startup.Checked);
+            };
             menu.Items.Add(startup);
-            menu.Items.Add("Проверить обновление…", null, (s, a) => UpdateForm.ShowSingle());
-            menu.Items.Add("О приложении…", null, (s, a) => AboutForm.ShowSingle());
+            menu.Items.Add("Проверить обновление…", null, (s, a) =>
+            {
+                Usage.Hit("menu.update_check");
+                UpdateForm.ShowSingle();
+            });
+            menu.Items.Add("О приложении…", null, (s, a) =>
+            {
+                Usage.Hit("menu.about");
+                AboutForm.ShowSingle();
+            });
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("Выход", null, (s, a) => exit());
+            menu.Items.Add("Выход", null, (s, a) =>
+            {
+                Usage.Hit("menu.exit");
+                exit();
+            });
         }
     }
 }

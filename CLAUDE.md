@@ -80,7 +80,14 @@
   общих файлов расходится осознанно (установка без прав, HKCU, тихий режим) — список в его `CLAUDE.md`;
   `Update{Checker,Form,Release}.cs` одинаковые у всех четырёх (сверка sha256 по `digest` релиза, «Установить сейчас»
   через ShellExecute — окно UAC у программ без прав), своё — `AppIdentity.UpdateSetupArguments` и `UpdateKeeps`. Тесты
-  общего кода обновления — в AgentProxy (`tests\csharp\run.cmd`).
+  общего кода обновления — в AgentProxy (`tests\csharp\run.cmd`). Одинаковые у всех четырёх и
+  `src\{Usage, UsageDay, UsageConsent, AutoUpdateCheck, UpdateWatcher}.cs`: статистика использования (счётчики за сутки,
+  пакет раз в час на `AppIdentity.SiteUrl + "usage"`) и проверка обновления раз в сутки с уведомлением; галочки — файлами
+  `usage-statistics.txt` (`on`/`off`; нет файла — не отправляется, поэтому установщик под чужой учёткой не включит её за пользователя) и `update-check-off.txt` в папке данных.
+- **Каталог статистики.** Сервер принимает только события и ключи состояния из каталога `USAGE_CATALOG` в
+  `D:\aokazantsev-site\panel\panel.py` (общие — `USAGE_COMMON_EVENTS`/`USAGE_COMMON_STATE`), остальное отбрасывает. Новое
+  событие или ключ — сначала строка в каталоге и деплой панели, потом выпуск программы. Значения состояния — только
+  `true`/`false`, неотрицательное число или `[a-z0-9_]` до 24 символов: имён, путей и адресов в статистике быть не должно.
 - **Своё у проекта:** `src\AppIdentity.cs` (имя, версия, ссылки, пути, `PayloadFiles`, параметры обновления),
   `src\Autostart.cs` (задача Планировщика или ключ Run), `installer\setup\SetupProfile.cs` (тексты, поля, галочки,
   свои шаги, `AfterLaunch`),

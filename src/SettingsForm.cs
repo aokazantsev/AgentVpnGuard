@@ -10,6 +10,7 @@ namespace AgentVpnGuard
         private readonly AppSettings original;
         private readonly Func<AppSettings> current;
         private readonly Func<AppSettings, bool> save;
+        private readonly Action optionsChanged;
         private readonly CheckedListBox adapters = new CheckedListBox();
         private readonly TextBox pinnedHosts = new TextBox();
         private readonly TextBox criticalHosts = new TextBox();
@@ -17,13 +18,16 @@ namespace AgentVpnGuard
         private readonly TextBox extraExecutables = new TextBox();
         private readonly CheckBox notifications = new CheckBox();
         private readonly CheckBox protection = new CheckBox();
+        private readonly CheckBox autoUpdate = new CheckBox();
+        private readonly CheckBox usageStatistics = new CheckBox();
         private readonly List<NetworkAdapter> adapterRows = new List<NetworkAdapter>();
 
-        public SettingsForm(AppSettings settings, Func<AppSettings> current, Func<AppSettings, bool> save)
+        public SettingsForm(AppSettings settings, Func<AppSettings> current, Func<AppSettings, bool> save, Action optionsChanged)
         {
             original = settings;
             this.current = current;
             this.save = save;
+            this.optionsChanged = optionsChanged;
             Text = AppIdentity.Name + " — настройки";
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
@@ -65,6 +69,16 @@ namespace AgentVpnGuard
             protection.AutoSize = true;
             protection.Checked = settings.ProtectionEnabled;
             layout.Controls.Add(protection);
+
+            autoUpdate.Text = "Раз в сутки проверять обновление и сообщать о новой версии";
+            autoUpdate.AutoSize = true;
+            autoUpdate.Checked = AutoUpdateCheck.IsEnabled;
+            layout.Controls.Add(autoUpdate);
+
+            usageStatistics.Text = "Отправлять автору анонимную статистику использования";
+            usageStatistics.AutoSize = true;
+            usageStatistics.Checked = UsageConsent.IsGiven;
+            layout.Controls.Add(usageStatistics);
 
             var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, Dock = DockStyle.Fill, AutoSize = true };
             var cancel = new Button { Text = "Отмена", AutoSize = true };
@@ -120,7 +134,33 @@ namespace AgentVpnGuard
                 if (!updated.PinnedHosts.Exists(pinned => string.Equals(pinned, critical, StringComparison.OrdinalIgnoreCase))) updated.PinnedHosts.Add(critical);
             }
             if (!save(updated)) return;
+            string problem = SaveOptions();
+            if (problem != null)
+            {
+                AppLog.Append("options not saved: " + problem);
+                MessageBox.Show(this, "Не удалось сохранить выбор проверки обновлений и статистики: " + problem, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            Usage.Hit("settings.save");
+            optionsChanged();
             Close();
+        }
+
+        private string SaveOptions()
+        {
+            try
+            {
+                if (autoUpdate.Checked != AutoUpdateCheck.IsEnabled) AutoUpdateCheck.Set(autoUpdate.Checked);
+                if (usageStatistics.Checked != UsageConsent.IsGiven) Usage.SetConsent(usageStatistics.Checked);
+                return null;
+            }
+            catch (System.IO.IOException error)
+            {
+                return error.Message;
+            }
+            catch (UnauthorizedAccessException error)
+            {
+                return error.Message;
+            }
         }
 
         private bool AdapterChoiceChanged()

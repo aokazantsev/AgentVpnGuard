@@ -74,13 +74,31 @@ namespace AgentVpnGuard
                     DetailsTitle = "Что уходит в отчёте",
                     Details = "Отчёт уходит один раз — при сбое программы или брандмауэра Windows — на aokazantsev.ru (сервер в России), "
                         + "без повторных попыток:\n"
-                        + "• версия программы, Windows и .NET;\n"
+                        + "• версия программы, Windows и .NET, время сбоя;\n"
                         + "• текст ошибки;\n"
                         + "• последние 100 КБ журнала " + Path.Combine(AppIdentity.DataDirectory, "log.txt") + ": имя пользователя и компьютера Windows, "
                         + "пути к программам Claude, названия сетевых адаптеров, адреса DNS-серверов VPN и адреса Claude внутри VPN;\n"
                         + "• IP-адрес, с которого пришёл отчёт.\n"
                         + "Отчёты видит только автор, хранятся последние 50 МБ. Изменить выбор — переустановить программу.",
                     Checked = File.Exists(AppSettings.FilePath) ? CrashReportConsent.IsGiven : LegacyInstall.ConsentGiven
+                },
+                new SetupOption
+                {
+                    Key = UsageConsent.OptionKey,
+                    Text = "Отправлять автору анонимную статистику использования",
+                    Hint = "Помогает понять, сколько людей пользуется программой и какие функции нужны. Без имён, путей и адресов. "
+                        + "Выключить можно и потом — в настройках программы.",
+                    DetailsTitle = "Что уходит в статистике",
+                    Details = "Раз в час, пока программа запущена, на aokazantsev.ru (сервер в России) уходят счётчики за текущие и неотправленные прошлые сутки (до недели):\n"
+                        + "• случайный номер установки — он не связан с тобой и компьютером;\n"
+                        + "• версия программы и Windows;\n"
+                        + "• сколько раз за сутки программа запускалась и сама находила новую версию, сколько раз ты пользовался пунктами меню, двойным кликом по значку, настройками и обновлением;\n"
+                        + "• текущие настройки: включены ли защита, уведомления, автозапуск, проверка обновлений и отчёты о сбоях, сколько адаптеров VPN, "
+                        + "дополнительных программ и программ под защитой, "
+                        + "состояние защиты.\n"
+                        + "Имена пользователя и компьютера, пути, названия адаптеров и адреса в статистику не попадают, IP-адрес сервер не хранит. "
+                        + "Статистика хранится 400 суток, дальше — только итоги по дням.",
+                    Checked = UsageConsent.InstallerDefault
                 }
             };
         }
@@ -104,6 +122,8 @@ namespace AgentVpnGuard
             if (saveProblem != null) throw new InvalidOperationException("Не удалось записать настройки в " + AppSettings.FilePath + ": " + saveProblem);
             CrashReportConsent.Set(request.Has(CrashReportConsent.OptionKey));
             SetupLog.Append("crash reports: " + request.Has(CrashReportConsent.OptionKey));
+            UsageConsent.Set(request.Has(UsageConsent.OptionKey));
+            SetupLog.Append("usage statistics: " + request.Has(UsageConsent.OptionKey));
             if (!settings.HasVpnAdapters) notes.Add("Адаптер VPN не указан — у Claude не будет сети, пока не выберешь его в настройках программы.");
             string firewallProblem = FirewallProblem();
             SetupLog.Append("firewall: " + (firewallProblem ?? "ok"));
