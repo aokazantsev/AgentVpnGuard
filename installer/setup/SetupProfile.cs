@@ -112,7 +112,7 @@ namespace AgentVpnGuard
             bool reset = request.Has(ResetSettingsKey);
             SetupLog.Append("reset settings: " + reset);
             AppSettings settings = reset ? new AppSettings() : LoadCurrent();
-            if (settings.ReadError != null) throw new InvalidOperationException("Не удалось прочитать настройки: " + settings.ReadError + ". Прежняя версия остановлена, защита действует как была. Повтори установку, когда файл освободится.");
+            if (settings.ReadError != null) throw new InvalidOperationException("Не удалось прочитать настройки: " + settings.ReadError + ". Защита действует как была.");
             bool fieldGuessed = fieldsReadError != null && request.Value(VpnAdapterKey) == DefaultVpnAdapter;
             SetupLog.Append("settings read at open: " + (fieldsReadError ?? "ok") + ", adapter field guessed: " + fieldGuessed);
             AppSettings saved = reset ? LoadCurrent() : settings;
