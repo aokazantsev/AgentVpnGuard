@@ -11,6 +11,29 @@ namespace AgentVpnGuard
     internal static class FirewallClient
     {
         private const int TimeoutMs = 60 * 1000;
+        private static readonly TimeSpan StaleAge = TimeSpan.FromHours(1);
+
+        public static void RemoveStaleFiles()
+        {
+            try
+            {
+                if (!Directory.Exists(AppIdentity.DataDirectory)) return;
+                DateTime limit = DateTime.UtcNow - StaleAge;
+                foreach (string pattern in new[] { "fw-*.request", "fw-*.result" })
+                {
+                    foreach (string path in Directory.GetFiles(AppIdentity.DataDirectory, pattern))
+                    {
+                        if (File.GetLastWriteTimeUtc(path) < limit) TryDelete(path);
+                    }
+                }
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
 
         public static void RunAsync(FirewallRequest request, Action<FirewallSyncResult, string> done)
         {

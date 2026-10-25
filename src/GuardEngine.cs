@@ -43,6 +43,7 @@ namespace AgentVpnGuard
         private string vpnKey;
         private int session;
         private int pinsSession = -1;
+        private int pinsResolvedSession = -1;
         private HashSet<string> reportedLeaks = new HashSet<string>();
         private DateTime vpnUpSinceUtc = DateTime.MinValue;
         private bool firstEvaluation = true;
@@ -363,7 +364,11 @@ namespace AgentVpnGuard
 
         private void RefreshPins(NetworkAdapter vpn, DateTime now)
         {
-            if (vpn != null && vpn.DnsServers.Count == 0) pinsSession = session;
+            if (vpn != null && vpn.DnsServers.Count == 0)
+            {
+                pinsSession = session;
+                pinsResolvedSession = session;
+            }
             if (vpn == null || vpn.Ipv4Address == null || (dnsRefreshRunning && dnsRefreshSession == session) || now < nextDnsRefreshUtc || vpn.DnsServers.Count == 0) return;
             dnsRefreshRunning = true;
             dnsRefreshSession = session;
@@ -406,6 +411,7 @@ namespace AgentVpnGuard
                         return;
                     }
                     pinsSession = session;
+                    pinsResolvedSession = session;
                     freshProbePin = null;
                     bool complete = resolved.Count == hosts.Count && resolved.Values.Any(address => address != HostsPinner.BlackholeAddress);
                     nextDnsRefreshUtc = DateTime.UtcNow + (complete ? DnsRefreshInterval : DnsRetryInterval);
@@ -598,7 +604,7 @@ namespace AgentVpnGuard
                 if (!known || address == HostsPinner.BlackholeAddress || !IPAddress.TryParse(address, out parsed))
                 {
                     report.Details.Add(host + ": нет адреса через VPN");
-                    if (pinsSession != session) warnings.Add(AwaitingDns);
+                    if (pinsResolvedSession != session) warnings.Add(AwaitingDns);
                     else if (string.Equals(host, ClaudeProbe.Host, StringComparison.OrdinalIgnoreCase)) warnings.Add(host + " нет адреса через VPN — у Claude нет сети");
                     else warnings.Add(host + " нет адреса через VPN — Claude к нему не попадёт");
                     continue;

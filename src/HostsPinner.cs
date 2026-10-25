@@ -24,18 +24,15 @@ namespace AgentVpnGuard
         public static Dictionary<string, string> ReadPins()
         {
             var pins = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            bool inside = false;
-            foreach (string line in ReadLines())
+            string[] lines = ReadLines();
+            bool[] inside = BlockMask(lines);
+            for (int index = 0; index < lines.Length; index++)
             {
-                string trimmed = line.Trim();
-                if (trimmed == BeginMarker || trimmed == LegacyBeginMarker) inside = true;
-                else if (trimmed == EndMarker || trimmed == LegacyEndMarker) inside = false;
-                else if (inside && trimmed.Length > 0 && !trimmed.StartsWith("#"))
-                {
-                    string[] parts = trimmed.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
-                    IPAddress address;
-                    if (parts.Length >= 2 && IPAddress.TryParse(parts[0], out address)) pins[parts[1]] = parts[0];
-                }
+                string trimmed = lines[index].Trim();
+                if (!inside[index] || !IsPinLine(trimmed)) continue;
+                string[] parts = trimmed.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+                IPAddress address;
+                if (parts.Length >= 2 && IPAddress.TryParse(parts[0], out address)) pins[parts[1]] = parts[0];
             }
             return pins;
         }
@@ -89,13 +86,12 @@ namespace AgentVpnGuard
             string text = encoding.GetString(original, hasBom ? 3 : 0, original.Length - (hasBom ? 3 : 0));
 
             var kept = new List<string>();
-            bool inside = false;
-            foreach (string line in SplitLines(text))
+            string[] lines = SplitLines(text);
+            bool[] inside = BlockMask(lines);
+            for (int index = 0; index < lines.Length; index++)
             {
-                string trimmed = line.Trim();
-                if (trimmed == BeginMarker || trimmed == LegacyBeginMarker) inside = true;
-                else if (trimmed == EndMarker || trimmed == LegacyEndMarker) inside = false;
-                else if (!inside) kept.Add(line);
+                string trimmed = lines[index].Trim();
+                if (!inside[index] && !IsBeginMarker(trimmed) && !IsEndMarker(trimmed)) kept.Add(lines[index]);
             }
             while (kept.Count > 0 && kept[kept.Count - 1].Trim().Length == 0) kept.RemoveAt(kept.Count - 1);
             var result = new StringBuilder();
@@ -115,12 +111,55 @@ namespace AgentVpnGuard
             return true;
         }
 
-        private static IEnumerable<string> ReadLines()
+        private static string[] ReadLines()
         {
             if (!File.Exists(HostsPath)) return new string[0];
             byte[] original = File.ReadAllBytes(HostsPath);
             bool hasBom = original.Length >= 3 && original[0] == 0xEF && original[1] == 0xBB && original[2] == 0xBF;
             return SplitLines(DetectEncoding(original, hasBom).GetString(original, hasBom ? 3 : 0, original.Length - (hasBom ? 3 : 0)));
+        }
+
+        private static bool IsBeginMarker(string trimmed)
+        {
+            return trimmed == BeginMarker || trimmed == LegacyBeginMarker;
+        }
+
+        private static bool IsEndMarker(string trimmed)
+        {
+            return trimmed == EndMarker || trimmed == LegacyEndMarker;
+        }
+
+        private static bool[] BlockMask(string[] lines)
+        {
+            var inside = new bool[lines.Length];
+            int index = 0;
+            while (index < lines.Length)
+            {
+                if (!IsBeginMarker(lines[index].Trim()))
+                {
+                    index++;
+                    continue;
+                }
+                int end = -1;
+                for (int next = index + 1; next < lines.Length && end < 0 && !IsBeginMarker(lines[next].Trim()); next++)
+                {
+                    if (IsEndMarker(lines[next].Trim())) end = next;
+                }
+                int last = index;
+                if (end >= 0) last = end;
+                else
+                {
+                    while (last + 1 < lines.Length && IsPinLine(lines[last + 1].Trim())) last++;
+                }
+                for (int line = index; line <= last; line++) inside[line] = true;
+                index = last + 1;
+            }
+            return inside;
+        }
+
+        private static bool IsPinLine(string trimmed)
+        {
+            return trimmed.Length > 0 && !trimmed.StartsWith("#");
         }
 
         private static Encoding DetectEncoding(byte[] bytes, bool hasBom)

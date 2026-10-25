@@ -36,6 +36,7 @@ namespace AgentVpnGuard
                 AppLog.Append("start " + AppIdentity.Version + ", user=" + Environment.UserDomainName + "\\" + Environment.UserName
                     + ", os=" + Environment.OSVersion.VersionString + ", 64bit=" + Environment.Is64BitProcess
                     + ", clr=" + Environment.Version + ", exe=" + Application.ExecutablePath);
+                FirewallClient.RemoveStaleFiles();
                 settings = ReadSettings();
                 if (settings.ReadError == null) Application.Run(new TrayApplication(settings));
             }

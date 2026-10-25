@@ -116,19 +116,44 @@ namespace AgentVpnGuard
             AppendLine(content, ExtraExecutablesKey, Join(ExtraExecutables));
             AppendLine(content, NotificationsKey, Notifications ? "1" : "0");
             AppendLine(content, ProtectionEnabledKey, ProtectionEnabled ? "1" : "0");
+            string temporary = FilePath + ".tmp";
             try
             {
                 Directory.CreateDirectory(AppIdentity.DataDirectory);
-                File.WriteAllText(FilePath, content.ToString(), new UTF8Encoding(false));
+                using (var stream = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None))
+                {
+                    byte[] bytes = new UTF8Encoding(false).GetBytes(content.ToString());
+                    stream.Write(bytes, 0, bytes.Length);
+                    stream.Flush(true);
+                }
+                if (File.Exists(FilePath)) File.Replace(temporary, FilePath, null);
+                else File.Move(temporary, FilePath);
                 return null;
             }
             catch (IOException error)
             {
+                DeleteTemporary(temporary);
                 return error.Message;
             }
             catch (UnauthorizedAccessException error)
             {
+                DeleteTemporary(temporary);
                 return error.Message;
+            }
+        }
+
+        private static void DeleteTemporary(string path)
+        {
+            if (!File.Exists(FilePath)) return;
+            try
+            {
+                File.Delete(path);
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
             }
         }
 
