@@ -13,7 +13,6 @@ namespace AgentVpnGuard
         private const string UninstallKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\" + AppIdentity.LegacyName;
         private const string LegacyExecutableName = AppIdentity.LegacyName + ".exe";
         private const int CommandTimeoutMs = 60 * 1000;
-        private const int ExitWaitMs = 5000;
         private const int DeleteAttempts = 10;
         private const int DeleteRetryMs = 500;
         private static readonly string[] LegacyFiles = { LegacyExecutableName, LegacyExecutableName + ".config", AppIdentity.UninstallerName, "README.md", "LICENSE", "CHANGELOG.md" };
@@ -130,18 +129,7 @@ namespace AgentVpnGuard
             {
                 using (process)
                 {
-                    try
-                    {
-                        process.Kill();
-                        if (!process.WaitForExit(ExitWaitMs)) stoppedAll = false;
-                    }
-                    catch (Win32Exception)
-                    {
-                        if (!process.WaitForExit(ExitWaitMs)) stoppedAll = false;
-                    }
-                    catch (InvalidOperationException)
-                    {
-                    }
+                    if (!RunningApp.Kill(process)) stoppedAll = false;
                 }
             }
             SetupLog.Append("legacy process stopped: " + stoppedAll);
