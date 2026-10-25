@@ -21,6 +21,8 @@ namespace AgentVpnGuard
 
         public static readonly string HostsPath = Path.Combine(Environment.SystemDirectory, @"drivers\etc\hosts");
 
+        public static ICollection<string> OwnHosts;
+
         public static Dictionary<string, string> ReadPins()
         {
             var pins = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -151,7 +153,7 @@ namespace AgentVpnGuard
                 {
                     while (last + 1 < lines.Length && IsPinLine(lines[last + 1].Trim())) last++;
                 }
-                for (int line = index; line <= last; line++) inside[line] = true;
+                for (int line = index; line <= last; line++) inside[line] = end >= 0 || line == index || IsOwnPinLine(lines[line].Trim());
                 index = last + 1;
             }
             return inside;
@@ -160,6 +162,20 @@ namespace AgentVpnGuard
         private static bool IsPinLine(string trimmed)
         {
             return trimmed.Length > 0 && !trimmed.StartsWith("#");
+        }
+
+        private static bool IsOwnPinLine(string trimmed)
+        {
+            if (!IsPinLine(trimmed)) return false;
+            ICollection<string> own = OwnHosts;
+            if (own == null) return true;
+            string[] parts = trimmed.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length != 2) return false;
+            foreach (string host in own)
+            {
+                if (string.Equals(host, parts[1], StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            return false;
         }
 
         private static Encoding DetectEncoding(byte[] bytes, bool hasBom)

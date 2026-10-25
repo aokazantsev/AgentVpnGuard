@@ -69,6 +69,13 @@ namespace AgentVpnGuard
             };
         }
 
+        public List<string> HostsFileHosts()
+        {
+            var hosts = new List<string>(PinnedHosts);
+            hosts.AddRange(ProxiedHosts);
+            return hosts;
+        }
+
         public static AppSettings Load()
         {
             return LoadFrom(FilePath);

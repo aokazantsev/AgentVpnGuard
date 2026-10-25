@@ -23,6 +23,7 @@ namespace AgentVpnGuard
             }
             try
             {
+                HostsPinner.OwnHosts = AppSettings.Load().HostsFileHosts();
                 HostsPinner.Remove();
             }
             catch (IOException error)

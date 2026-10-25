@@ -44,6 +44,7 @@ namespace AgentVpnGuard
         private int session;
         private int pinsSession = -1;
         private int pinsResolvedSession = -1;
+        private int pinsWithoutDnsSession = -1;
         private HashSet<string> reportedLeaks = new HashSet<string>();
         private DateTime vpnUpSinceUtc = DateTime.MinValue;
         private bool firstEvaluation = true;
@@ -68,9 +69,15 @@ namespace AgentVpnGuard
             this.settings = settings;
             this.post = post;
             this.changed = changed;
+            PublishOwnHosts();
             pins = SafeReadPins();
             written = new Dictionary<string, string>(pins, StringComparer.OrdinalIgnoreCase);
             foreach (string stray in StrayExecutables.Load()) announcedStrayExecutables.Add(stray);
+        }
+
+        private void PublishOwnHosts()
+        {
+            HostsPinner.OwnHosts = settings.HostsFileHosts();
         }
 
         public void RetryFirewall()
@@ -87,6 +94,7 @@ namespace AgentVpnGuard
                 || settings.ProtectionEnabled != newSettings.ProtectionEnabled;
             bool proxiedChanged = !SameList(settings.ProxiedHosts, newSettings.ProxiedHosts);
             settings = newSettings;
+            PublishOwnHosts();
             if (proxiedChanged && !vpnInputsChanged) proxied.Restart();
             if (!vpnInputsChanged) return;
             lastSignature = null;
@@ -364,12 +372,18 @@ namespace AgentVpnGuard
 
         private void RefreshPins(NetworkAdapter vpn, DateTime now)
         {
-            if (vpn != null && vpn.DnsServers.Count == 0)
+            if (vpn != null && (vpn.DnsServers.Count == 0 || vpn.Ipv4Address == null))
             {
                 pinsSession = session;
                 pinsResolvedSession = session;
+                pinsWithoutDnsSession = session;
             }
             if (vpn == null || vpn.Ipv4Address == null || (dnsRefreshRunning && dnsRefreshSession == session) || now < nextDnsRefreshUtc || vpn.DnsServers.Count == 0) return;
+            if (pinsWithoutDnsSession == session)
+            {
+                pinsWithoutDnsSession = -1;
+                pinsResolvedSession = -1;
+            }
             dnsRefreshRunning = true;
             dnsRefreshSession = session;
             var hosts = new List<string>(settings.PinnedHosts);
@@ -603,9 +617,14 @@ namespace AgentVpnGuard
                 bool known = pins.TryGetValue(host, out address);
                 if (!known || address == HostsPinner.BlackholeAddress || !IPAddress.TryParse(address, out parsed))
                 {
+                    if (pinsResolvedSession != session)
+                    {
+                        report.Details.Add(host + ": узнаю адрес…");
+                        warnings.Add(AwaitingDns);
+                        continue;
+                    }
                     report.Details.Add(host + ": нет адреса через VPN");
-                    if (pinsResolvedSession != session) warnings.Add(AwaitingDns);
-                    else if (string.Equals(host, ClaudeProbe.Host, StringComparison.OrdinalIgnoreCase)) warnings.Add(host + " нет адреса через VPN — у Claude нет сети");
+                    if (string.Equals(host, ClaudeProbe.Host, StringComparison.OrdinalIgnoreCase)) warnings.Add(host + " нет адреса через VPN — у Claude нет сети");
                     else warnings.Add(host + " нет адреса через VPN — Claude к нему не попадёт");
                     continue;
                 }
