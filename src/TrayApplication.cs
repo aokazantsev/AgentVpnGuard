@@ -219,13 +219,25 @@ namespace AgentVpnGuard
 
         private void UpdateUsageState()
         {
-            Usage.SetState("autostart", Autostart.IsEnabled());
+            System.Threading.ThreadPool.QueueUserWorkItem(state => ReportAutostart());
             Usage.SetState("auto_update", AutoUpdateCheck.IsEnabled);
             Usage.SetState("crash_reports", CrashReportConsent.IsGiven);
             Usage.SetState("protection", settings.ProtectionEnabled);
             Usage.SetState("notifications", settings.Notifications);
             Usage.SetState("vpn_adapters", settings.VpnAdapters.Count);
             Usage.SetState("extra_programs", settings.ExtraExecutables.Count);
+        }
+
+        private static void ReportAutostart()
+        {
+            try
+            {
+                Usage.SetState("autostart", Autostart.IsEnabled());
+            }
+            catch (Exception error)
+            {
+                AppLog.Append("autostart query failed: " + error.Message);
+            }
         }
 
         private static string Cause(string headline)

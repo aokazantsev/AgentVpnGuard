@@ -120,9 +120,31 @@ namespace AgentVpnGuard
             settings.VpnAdapters = keepSaved ? new List<string>(saved.VpnAdapters) : AppSettings.ParseList(request.Value(VpnAdapterKey));
             string saveProblem = settings.Save();
             if (saveProblem != null) throw new InvalidOperationException("Не удалось записать настройки в " + AppSettings.FilePath + ": " + saveProblem);
-            CrashReportConsent.Set(request.Has(CrashReportConsent.OptionKey));
+            try
+            {
+                CrashReportConsent.Set(request.Has(CrashReportConsent.OptionKey));
+            }
+            catch (IOException error)
+            {
+                throw new InvalidOperationException("Не удалось записать выбор об отчётах о сбоях в папку " + AppIdentity.DataDirectory + " (" + error.Message.TrimEnd('.') + ").");
+            }
+            catch (UnauthorizedAccessException error)
+            {
+                throw new InvalidOperationException("Не удалось записать выбор об отчётах о сбоях в папку " + AppIdentity.DataDirectory + " (" + error.Message.TrimEnd('.') + ").");
+            }
             SetupLog.Append("crash reports: " + request.Has(CrashReportConsent.OptionKey));
-            UsageConsent.Set(request.Has(UsageConsent.OptionKey));
+            try
+            {
+                UsageConsent.Set(request.Has(UsageConsent.OptionKey));
+            }
+            catch (IOException error)
+            {
+                throw new InvalidOperationException("Не удалось записать выбор о статистике использования в папку " + AppIdentity.DataDirectory + " (" + error.Message.TrimEnd('.') + ").");
+            }
+            catch (UnauthorizedAccessException error)
+            {
+                throw new InvalidOperationException("Не удалось записать выбор о статистике использования в папку " + AppIdentity.DataDirectory + " (" + error.Message.TrimEnd('.') + ").");
+            }
             SetupLog.Append("usage statistics: " + request.Has(UsageConsent.OptionKey));
             if (!settings.HasVpnAdapters) notes.Add("Адаптер VPN не указан — у Claude не будет сети, пока не выберешь его в настройках программы.");
             string firewallProblem = FirewallProblem();
